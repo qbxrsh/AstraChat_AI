@@ -1,37 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Typography,
   Card,
   CardContent,
-  FormControl,
   FormControlLabel,
-  InputLabel,
-  Select,
-  MenuItem,
+  List,
+  ListItem,
+  ListItemText,
   Switch,
   Button,
   IconButton,
   Tooltip,
+  Alert,
+  Divider,
+  Popover,
 } from '@mui/material';
 import {
   Mic as MicIcon,
   Refresh as RefreshIcon,
   HelpOutline as HelpOutlineIcon,
   Restore as RestoreIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import {
+  DROPDOWN_TRIGGER_BUTTON_SX,
+  DROPDOWN_CHEVRON_SX,
+  getDropdownPopoverPaperSx,
+  getDropdownItemSx,
+  DROPDOWN_ITEM_HOVER_BG,
+} from '../../constants/menuStyles';
 import { useAppActions } from '../../contexts/AppContext';
 import { getApiUrl } from '../../config/api';
 
+type Engine = 'whisperx' | 'vosk';
+type Language = 'ru' | 'en' | 'auto';
 
 export default function TranscriptionSettings() {
+  const theme = useTheme();
+  const dropdownItemSx = useMemo(() => getDropdownItemSx(theme.palette.mode === 'dark'), [theme.palette.mode]);
   const [transcriptionSettings, setTranscriptionSettings] = useState({
-    engine: "whisperx" as "whisperx" | "vosk",
-    language: "ru",
+    engine: 'whisperx' as Engine,
+    language: 'ru' as Language,
     auto_detect: true,
   });
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [enginePopoverAnchor, setEnginePopoverAnchor] = useState<HTMLElement | null>(null);
+  const [languagePopoverAnchor, setLanguagePopoverAnchor] = useState<HTMLElement | null>(null);
+
   const { showNotification } = useAppActions();
 
   useEffect(() => {
@@ -42,7 +59,7 @@ export default function TranscriptionSettings() {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       saveTranscriptionSettings();
-    }, 1000); // Сохраняем через 1 секунду после изменения
+    }, 1000);
 
     return () => clearTimeout(timeoutId);
   }, [transcriptionSettings]);
@@ -69,7 +86,7 @@ export default function TranscriptionSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(transcriptionSettings),
       });
-      
+
       if (response.ok) {
         showNotification('success', 'Настройки транскрибации сохранены');
       } else {
@@ -86,13 +103,45 @@ export default function TranscriptionSettings() {
   };
 
   const resetToDefaults = () => {
-    const defaultSettings = {
-      engine: "whisperx" as "whisperx" | "vosk",
-      language: "ru",
+    setTranscriptionSettings({
+      engine: 'whisperx',
+      language: 'ru',
       auto_detect: true,
-    };
-    setTranscriptionSettings(defaultSettings);
+    });
     showNotification('info', 'Настройки транскрибации сброшены к значениям по умолчанию');
+  };
+
+  const getEngineLabel = (engine: Engine): string => {
+    switch (engine) {
+      case 'whisperx':
+        return 'WhisperX';
+      case 'vosk':
+        return 'Vosk';
+      default:
+        return 'WhisperX';
+    }
+  };
+
+  const getEngineDescription = (engine: Engine): string => {
+    switch (engine) {
+      case 'whisperx':
+        return 'Высокая точность распознавания, поддержка множества языков, хорошо работает с шумом. Требует больше ресурсов и работает медленнее, чем Vosk.';
+      case 'vosk':
+        return 'Быстрая работа и низкое потребление ресурсов, подходит для работы в реальном времени. Меньшая точность по сравнению с WhisperX, хуже справляется с шумом.';
+      default:
+        return '';
+    }
+  };
+
+  const getEngineUseCase = (engine: Engine): string => {
+    switch (engine) {
+      case 'whisperx':
+        return 'Используйте для максимальной точности транскрипции, особенно при записях с шумом или на разных языках.';
+      case 'vosk':
+        return 'Используйте когда важна скорость или ограничены ресурсы; подходит для быстрой предобработки и онлайн-распознавания.';
+      default:
+        return '';
+    }
   };
 
   return (
@@ -102,17 +151,18 @@ export default function TranscriptionSettings() {
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <MicIcon color="primary" />
             Основные настройки
-            <Tooltip title="Настройки автоматически сохраняются при изменении" arrow>
-              <IconButton 
-                size="small" 
-                sx={{ 
+            <Tooltip
+              title="Настройки распознавания речи для голосового ввода. Сохраняются автоматически при изменении."
+              arrow
+            >
+              <IconButton
+                size="small"
+                sx={{
                   ml: 0.5,
                   opacity: 0.7,
                   '&:hover': {
                     opacity: 1,
-                    '& .MuiSvgIcon-root': {
-                      color: 'primary.main',
-                    },
+                    '& .MuiSvgIcon-root': { color: 'primary.main' },
                   },
                 }}
               >
@@ -120,194 +170,255 @@ export default function TranscriptionSettings() {
               </IconButton>
             </Tooltip>
           </Typography>
-          
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Настройте параметры распознавания речи для голосового ввода
-          </Typography>
 
-          <Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(250px, 1fr))" gap={3}>
-            <FormControl fullWidth>
-              <InputLabel>Движок транскрибации</InputLabel>
-              <Select
-                value={transcriptionSettings.engine}
-                label="Движок транскрибации"
-                onChange={(e) => handleSettingChange('engine', e.target.value)}
-              >
-                <MenuItem value="whisperx">
-                  <Box>
-                    <Typography variant="body2" fontWeight="500">
-                      WhisperX
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Точный, медленный
-                    </Typography>
+          <List sx={{ p: 0 }}>
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    Движок транскрибации
+                    <Tooltip
+                      title="Выберите движок распознавания речи. WhisperX — точнее, Vosk — быстрее."
+                      arrow
+                    >
+                      <IconButton
+                        size="small"
+                        sx={{
+                          p: 0,
+                          ml: 0.5,
+                          opacity: 0.7,
+                          '&:hover': {
+                            opacity: 1,
+                            '& .MuiSvgIcon-root': { color: 'primary.main' },
+                          },
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <HelpOutlineIcon fontSize="small" color="action" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
-                </MenuItem>
-                <MenuItem value="vosk">
-                  <Box>
-                    <Typography variant="body2" fontWeight="500">
-                      Vosk
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Быстрый, менее точный
-                    </Typography>
+                }
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+              />
+              <Box sx={{ minWidth: 280 }}>
+                <Box
+                  onClick={(e) => !isLoading && setEnginePopoverAnchor(e.currentTarget)}
+                  sx={{
+                    ...DROPDOWN_TRIGGER_BUTTON_SX,
+                    opacity: isLoading ? 0.7 : 1,
+                    pointerEvents: isLoading ? 'none' : 'auto',
+                  }}
+                >
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {transcriptionSettings.engine === 'whisperx' ? 'WhisperX' : 'Vosk'}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: enginePopoverAnchor ? 'rotate(180deg)' : 'none' }} />
+                </Box>
+                <Popover
+                  open={Boolean(enginePopoverAnchor)}
+                  anchorEl={enginePopoverAnchor}
+                  onClose={() => setEnginePopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(enginePopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    {(['whisperx', 'vosk'] as const).map((engine) => (
+                      <Box
+                        key={engine}
+                        onClick={() => { handleSettingChange('engine', engine); setEnginePopoverAnchor(null); }}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: transcriptionSettings.engine === engine ? 'white' : 'rgba(255,255,255,0.9)',
+                          fontWeight: transcriptionSettings.engine === engine ? 600 : 400,
+                          bgcolor: transcriptionSettings.engine === engine ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                        }}
+                      >
+                        {engine === 'whisperx' ? 'WhisperX' : 'Vosk'}
+                      </Box>
+                    ))}
                   </Box>
-                </MenuItem>
-              </Select>
-            </FormControl>
-            
-            <FormControl fullWidth>
-              <InputLabel>Язык транскрибации</InputLabel>
-              <Select
-                value={transcriptionSettings.language}
-                label="Язык транскрибации"
-                onChange={(e) => handleSettingChange('language', e.target.value)}
-              >
-                <MenuItem value="ru">
-                  <Box>
-                    <Typography variant="body2" fontWeight="500">
-                      Русский
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Рекомендуется для русской речи
-                    </Typography>
-                  </Box>
-                </MenuItem>
-                <MenuItem value="en">
-                  <Box>
-                    <Typography variant="body2" fontWeight="500">
-                      English
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Рекомендуется для английской речи
-                    </Typography>
-                  </Box>
-                </MenuItem>
-                <MenuItem value="auto">
-                  <Box>
-                    <Typography variant="body2" fontWeight="500">
-                      Автоопределение
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Автоматическое определение языка
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-          
-          <Box mt={3}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={transcriptionSettings.auto_detect}
-                  onChange={(e) => handleSettingChange('auto_detect', e.target.checked)}
-                />
-              }
-              label="Автоматическое определение языка"
-            />
-          </Box>
-        </CardContent>
-      </Card>
+                </Popover>
+              </Box>
+            </ListItem>
 
-      {/* Информация о движках */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Информация о движках
-          </Typography>
-          
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 2 }}>
-            <Box sx={{ p: 2, border: '1px solid', borderColor: 'grey.300', borderRadius: 1 }}>
-              <Typography variant="subtitle1" fontWeight="600" gutterBottom>
-                WhisperX
+            <Divider />
+
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    Язык транскрибации
+                    <Tooltip
+                      title="Язык распознавания. Автоопределение доступно при включённой опции ниже."
+                      arrow
+                    >
+                      <IconButton
+                        size="small"
+                        sx={{
+                          p: 0,
+                          ml: 0.5,
+                          opacity: 0.7,
+                          '&:hover': {
+                            opacity: 1,
+                            '& .MuiSvgIcon-root': { color: 'primary.main' },
+                          },
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <HelpOutlineIcon fontSize="small" color="action" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                }
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+              />
+              <Box sx={{ minWidth: 280 }}>
+                <Box
+                  onClick={(e) => !isLoading && setLanguagePopoverAnchor(e.currentTarget)}
+                  sx={{
+                    ...DROPDOWN_TRIGGER_BUTTON_SX,
+                    opacity: isLoading ? 0.7 : 1,
+                    pointerEvents: isLoading ? 'none' : 'auto',
+                  }}
+                >
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {transcriptionSettings.language === 'ru' ? 'Русский' : transcriptionSettings.language === 'en' ? 'English' : 'Автоопределение'}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: languagePopoverAnchor ? 'rotate(180deg)' : 'none' }} />
+                </Box>
+                <Popover
+                  open={Boolean(languagePopoverAnchor)}
+                  anchorEl={languagePopoverAnchor}
+                  onClose={() => setLanguagePopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(languagePopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    {(['ru', 'en', 'auto'] as const).map((lang) => (
+                      <Box
+                        key={lang}
+                        onClick={() => { handleSettingChange('language', lang); setLanguagePopoverAnchor(null); }}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: transcriptionSettings.language === lang ? 'white' : 'rgba(255,255,255,0.9)',
+                          fontWeight: transcriptionSettings.language === lang ? 600 : 400,
+                          bgcolor: transcriptionSettings.language === lang ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                        }}
+                      >
+                        {lang === 'ru' ? 'Русский' : lang === 'en' ? 'English' : 'Автоопределение'}
+                      </Box>
+                    ))}
+                  </Box>
+                </Popover>
+              </Box>
+            </ListItem>
+
+            <Divider />
+
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    Автоматическое определение языка
+                    <Tooltip
+                      title="Если включено, язык может определяться автоматически по аудио."
+                      arrow
+                    >
+                      <IconButton
+                        size="small"
+                        sx={{
+                          p: 0,
+                          ml: 0.5,
+                          opacity: 0.7,
+                          '&:hover': {
+                            opacity: 1,
+                            '& .MuiSvgIcon-root': { color: 'primary.main' },
+                          },
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <HelpOutlineIcon fontSize="small" color="action" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                }
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+              />
+              <Switch
+                checked={transcriptionSettings.auto_detect}
+                onChange={(e) => handleSettingChange('auto_detect', e.target.checked)}
+                disabled={isLoading}
+              />
+            </ListItem>
+          </List>
+
+          {/* Информационный блок о выбранном движке — как в RAG */}
+          <Alert
+            severity="info"
+            sx={{
+              mt: 2,
+              '& .MuiAlert-message': { width: '100%' },
+            }}
+          >
+            <Box>
+              <Typography variant="subtitle2" fontWeight="600" gutterBottom>
+                {getEngineLabel(transcriptionSettings.engine)}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                <strong>Преимущества:</strong>
+                {getEngineDescription(transcriptionSettings.engine)}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Высокая точность распознавания
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Поддержка множества языков
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Хорошо работает с шумом
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Недостатки:</strong> Медленная работа, требует больше ресурсов
+              <Typography variant="body2" fontWeight="500" sx={{ mt: 1 }}>
+                {getEngineUseCase(transcriptionSettings.engine)}
               </Typography>
             </Box>
+          </Alert>
 
-            <Box sx={{ p: 2, border: '1px solid', borderColor: 'grey.300', borderRadius: 1 }}>
-              <Typography variant="subtitle1" fontWeight="600" gutterBottom>
-                Vosk
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                <strong>Преимущества:</strong>
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Быстрая работа
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Низкое потребление ресурсов
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                • Работает в реальном времени
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Недостатки:</strong> Меньшая точность, хуже работает с шумом
-              </Typography>
-            </Box>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 3 }}>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={loadTranscriptionSettings}
+              disabled={isLoading}
+            >
+              Обновить настройки
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<RestoreIcon />}
+              onClick={resetToDefaults}
+            >
+              Восстановить настройки
+            </Button>
           </Box>
         </CardContent>
       </Card>
-
-      {/* Текущие настройки */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Текущие настройки
-          </Typography>
-          
-          <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              <strong>Движок:</strong> {transcriptionSettings.engine === 'whisperx' ? 'WhisperX' : 'Vosk'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              <strong>Язык:</strong> {
-                transcriptionSettings.language === 'ru' ? 'Русский' :
-                transcriptionSettings.language === 'en' ? 'English' :
-                'Автоопределение'
-              }
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              <strong>Автоопределение языка:</strong> {transcriptionSettings.auto_detect ? 'Включено' : 'Отключено'}
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Кнопки управления */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={loadTranscriptionSettings}
-          disabled={isLoading}
-        >
-          Обновить настройки
-        </Button>
-        
-        <Button
-          variant="outlined"
-          startIcon={<RestoreIcon />}
-          onClick={resetToDefaults}
-        >
-          Восстановить настройки
-        </Button>
-      </Box>
     </Box>
   );
 }

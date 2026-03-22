@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Обновление pip, setuptools и wheel для избежания конфликтов зависимостей
-RUN pip install --upgrade pip setuptools wheel
+RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # Установка рабочей директории
 WORKDIR /app
@@ -36,8 +36,8 @@ WORKDIR /app
 # Копирование requirements.txt
 COPY requirements.txt .
 
-# Установка Python зависимостей с обновлённым резолвером
-RUN pip install --no-cache-dir --upgrade-strategy only-if-needed -r requirements.txt
+# Установка Python зависимостей (python3 -m pip гарантирует правильный интерпретатор)
+RUN python3 -m pip install --no-cache-dir --upgrade-strategy only-if-needed --timeout 120 --retries 5 -r requirements.txt
 
 # Копирование исходного кода с явным указанием прав доступа
 COPY --chown=root:root . /app/
@@ -55,5 +55,5 @@ RUN ln -sf /app /app/backend
 # Открытие порта
 EXPOSE 8000
 
-# Команда запуска - запускаем из корня, чтобы импорты работали
-CMD ["python", "/app/main.py"]
+# Команда запуска - новый backend с микросервисной архитектурой
+CMD ["python", "main.py"]

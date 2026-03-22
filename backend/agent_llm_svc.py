@@ -26,10 +26,17 @@ import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from config import get_path
 
-# Получаем путь к моделям из конфига
-MODEL_PATH = get_path("model_path")
-from backend.context_prompts import context_prompt_manager
-from backend.llm_client import ask_agent_llm_svc, get_llm_service
+# Импорт путей и настроек
+try:
+    from backend.config import get_path
+    MODEL_PATH = get_path("model_path")
+    from backend.context_prompts import context_prompt_manager
+    from backend.llm_client import ask_agent_llm_svc, get_llm_service
+except ImportError:
+    from config import get_path
+    MODEL_PATH = get_path("model_path")
+    from context_prompts import context_prompt_manager
+    from llm_client import ask_agent_llm_svc, get_llm_service
 
 # Настройка логирования с поддержкой UTF-8
 logger = logging.getLogger(__name__)
@@ -198,10 +205,35 @@ def reload_model_by_path(model_path):
         # Проверяем, является ли путь llm-svc путем
         if model_path.startswith("llm-svc://"):
             # Извлекаем имя модели из пути
-            model_name = model_path.replace("llm-svc://", "")
+            model_name = model_path.replace("llm-svc://", "").strip()
+            if not model_name:
+                logger.warning("llm-svc: пустое имя модели в пути")
+                return False
             _selected_model_name = model_name
-            logger.info(f"Выбрана модель из llm-svc: {model_name}. Модель будет использоваться при следующем запросе.")
-            return True
+            # Запрашиваем llm-svc реально переключить загруженную модель (веса)
+            try:
+                async def _load_on_llm_svc():
+                    service = await get_llm_service()
+                    ok = await service.client.load_model(model_name)
+                    if ok:
+                        service.model_name = model_name
+                        logger.info(f"[llm-svc] Обновлён model_name в бэкенде: {model_name}")
+                    return ok
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, _load_on_llm_svc())
+                        return future.result()
+                else:
+                    return loop.run_until_complete(_load_on_llm_svc())
+            except Exception as e:
+                logger.exception(f"Ошибка переключения модели в llm-svc: {e}")
+                return False
         
         # Если путь к локальному файлу, но мы используем llm-svc, предупреждаем
         if os.path.exists(model_path) and model_path.endswith('.gguf'):
@@ -324,7 +356,18 @@ def prepare_prompt(text, system_prompt=None, history=None, model_path=None, cust
     
     return "".join(prompt_parts)
 
-def ask_agent(prompt, history=None, max_tokens=None, streaming=False, stream_callback=None, model_path=None, custom_prompt_id=None, images=None):
+def ask_agent(
+    prompt,
+    history=None,
+    max_tokens=None,
+    streaming=False,
+    stream_callback=None,
+    model_path=None,
+    custom_prompt_id=None,
+    images=None,
+    system_prompt=None,
+    temperature=None,
+):
     """Основная функция для работы с AI агентом через llm-svc"""
     
     if USE_LLM_SVC:
@@ -334,6 +377,8 @@ def ask_agent(prompt, history=None, max_tokens=None, streaming=False, stream_cal
         # Если не указано количество токенов, берем из настроек
         if max_tokens is None:
             max_tokens = model_settings.get("output_tokens")
+        if temperature is None:
+            temperature = float(model_settings.get("temperature") or 0.7)
         
         try:
             # Используем llm_client для генерации
@@ -345,7 +390,9 @@ def ask_agent(prompt, history=None, max_tokens=None, streaming=False, stream_cal
                 stream_callback=stream_callback,
                 model_path=model_path,
                 custom_prompt_id=custom_prompt_id,
-                images=images
+                images=images,
+                system_prompt=system_prompt,
+                temperature=temperature,
             )
             
             # Проверяем, не была ли генерация отменена

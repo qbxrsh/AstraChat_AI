@@ -163,7 +163,7 @@ export default function GeneralSettings({ isDarkMode, onToggleTheme }: GeneralSe
               </IconButton>
             </Tooltip>
           </Typography>
-          
+
           <List>
             {/* Неограниченная память */}
             <ListItem

@@ -1,7 +1,27 @@
 """
 Pydantic models module.
 """
-
-from .schemas import ChatRequest, ChatResponse, HealthResponse, ModelsListResponse
-
-__all__ = ["ChatRequest", "ChatResponse", "HealthResponse", "ModelsListResponse"]
+from .schemas import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatCompletionChunk,
+    HealthResponse,
+    ModelsListResponse,
+    Message,
+    ToolCall,
+    FunctionCall,
+    ToolDefinition,
+    MessageRole
+)
+__all__ = [
+    "ChatCompletionRequest",
+    "ChatCompletionResponse",
+    "ChatCompletionChunk",
+    "HealthResponse",
+    "ModelsListResponse",
+    "Message",
+    "ToolCall",
+    "FunctionCall",
+    "ToolDefinition",
+    "MessageRole"
+]

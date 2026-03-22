@@ -1,52 +1,109 @@
 services:
-  # AI Models Service - llm-svc (расширенный с Vosk и Silero)
-  llm-svc:
+  # LLM Service (только LLM модели)
+  llm-service:
     build:
       context: ./llm-svc
       dockerfile: Dockerfile
     ports:
-      - "8001:8000"  # llm-svc на порту 8001
-    
-    # Увеличиваем память для большой модели (30GB)
-    # ЭТО НЕОБХОДИМО ДЛЯ ЗАПУСКА БОЛЬШОЙ МОДЕЛИ QWEN (30GB) ЛОКАЛЬНО!!!! Эту часть можно будет удалить если запустим модель на облаке.
+      - "8002:8000"
     deploy:
       resources:
-        limits:
-          memory: 50G  # Ограничение памяти для контейнера
         reservations:
-          memory: 32G  # Резервируем память
-    
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
-      # Монтируем конфигурацию
+      - ./models:/app/models:ro          # GGUF модели для LLM (исправлен путь монтирования)
       - ./llm-svc/config:/app/config:ro
-      # LLM модели монтируются в отдельную директорию
-      - ./models:/app/models/llm:ro
-      # Голосовые модели для распознавания и синтеза речи
-      # Монтируем директории для моделей (они будут скачиваться автоматически при первом запуске)
-      - ./model_small:/app/models/vosk
-      - ./silero_models:/app/models/silero
-      - ./whisperx_models:/app/models/whisperx_models
-      - ./diarize_models:/app/models/diarize_models
-    environment:
-      - CONFIG_PATH=${CONFIG_PATH}
-      - PYTHONPATH=/app
-      # Пути к моделям (все значения из .env файла, если он есть)
-      - LLM_MODEL_PATH=${LLM_MODEL_PATH}
-      - LLM_MODEL_NAME=${LLM_MODEL_NAME}
-      - VOSK_MODEL_PATH=${VOSK_MODEL_PATH}
-      - SILERO_MODELS_DIR=${SILERO_MODELS_DIR}
-      - WHISPERX_MODELS_DIR=${WHISPERX_MODELS_DIR}
-      - DIARIZATION_MODELS_DIR=${DIARIZATION_MODELS_DIR}
-      - DIARIZATION_CONFIG_PATH=${DIARIZATION_CONFIG_PATH}
     restart: unless-stopped
     networks:
       - astrachat-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s  # Увеличиваем время запуска для загрузки моделей
+
+  # STT Service (WhisperX / Vosk)
+  stt-service:
+    build:
+      context: ./SVC-SPEECH-RECG
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./SVC-SPEECH-RECG/vosk_models:/app/models/vosk:ro
+      - ./whisperx_models:/app/models/whisperx_models
+      - ./SVC-SPEECH-RECG/config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - astrachat-network
+
+  # TTS Service (Silero)
+  tts-service:
+    build:
+      context: ./SVC-SPEECH-SYNT
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./silero_models:/app/models/silero:ro
+      - ./SVC-SPEECH-SYNT/config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - astrachat-network
+
+  # OCR Service (Surya). Backend вызывает его по http://ocr-service:8000 (SVC_OCR_URL) для извлечения текста из изображений при загрузке документов.
+  ocr-service:
+    build:
+      context: ./SVC-OCR
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./SVC-OCR/config:/app/config:ro
+      - ./surya_models:/app/models/surya
+    environment:
+      - DATALAB_CACHE_DIR=/app/models/surya
+      - HF_HOME=/app/models/surya
+      - HF_HUB_CACHE=/app/models/surya
+      - TRANSFORMERS_CACHE=/app/models/surya
+    restart: unless-stopped
+    networks:
+      - astrachat-network
+
+  # Diarization Service
+  diarization-service:
+    build:
+      context: ./SVC-SPEECH-DIAR
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./diarize_models:/app/models/diarization:ro
+      - ./SVC-SPEECH-DIAR/config:/app/config:ro
+    environment:
+      - CONFIG_PATH=/app/config/config.yml
+    restart: unless-stopped
+    networks:
+      - astrachat-network
 
   # Backend - FastAPI (теперь зависит от llm-svc, MongoDB и PostgreSQL)
   astrachat-backend:
@@ -62,8 +119,15 @@ services:
       - ./models:/app/models:ro  # Монтирование локальных моделей (эмбеддинги и др.)
     environment:
       - PYTHONPATH=/app
-      - LLM_SERVICE_URL=${LLM_SVC_INTERNAL_URL:-http://llm-svc:8000}
+      # Старые переменные (для обратной совместимости)
+      - LLM_SERVICE_URL=${LLM_SVC_INTERNAL_URL:-http://llm-service:8000}
       - USE_LLM_SVC=${USE_LLM_SVC:-true}
+      # Новые адреса микросервисов (используются backend/config/config.py и backend/llm_client.py)
+      - SVC_LLM_URL=http://llm-service:8000
+      - SVC_STT_URL=http://stt-service:8000
+      - SVC_TTS_URL=http://tts-service:8000
+      - SVC_OCR_URL=http://ocr-service:8000
+      - SVC_DIARIZATION_URL=http://diarization-service:8000
       - DOCKER_ENV=${DOCKER_ENV:-true}
       - CONFIG_PATH=${CONFIG_PATH}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -88,15 +152,80 @@ services:
       - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
       - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME:-astrachat-temp}
       - MINIO_DOCUMENTS_BUCKET_NAME=${MINIO_DOCUMENTS_BUCKET_NAME:-astrachat-documents}
+      - MINIO_MEMORY_RAG_BUCKET_NAME=${MINIO_MEMORY_RAG_BUCKET_NAME:-astrachat-memory-rag}
+      # RAG (SVC-RAG) URL для backend/rag_client.py
+      - SVC_RAG_URL=http://svc-rag:8000/v1
     depends_on:
-      llm-svc:
-        condition: service_started # service_healthy если хотим дождаться, чтобы сервис запустился и стал доступен
+      llm-service:
+        condition: service_started
+      stt-service:
+        condition: service_started
+      tts-service:
+        condition: service_started
+      ocr-service:
+        condition: service_started
+      diarization-service:
+        condition: service_started
       mongodb:
         condition: service_healthy
       postgresql:
         condition: service_healthy
       minio:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - astrachat-network
+
+  # RAG Models Service (эмбеддинги + реранкер для SVC-RAG)
+  rag-models:
+    build:
+      context: ./SVC-RAG-MODELS
+      dockerfile: Dockerfile
+    container_name: astrachat-rag-models
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./models:/app/models:ro        # models/rag/* внутри контейнера
+      - ./SVC-RAG-MODELS/config:/app/config:ro
+    environment:
+      - CONFIG_PATH=/app/config/config.yml
+    restart: unless-stopped
+    networks:
+      - astrachat-network
+
+  # RAG Logic Service (SVC-RAG) — парсинг, pgvector, BM25, иерархия
+  svc-rag:
+    build:
+      context: ./SVC-RAG
+      dockerfile: Dockerfile
+    container_name: astrachat-svc-rag
+    ports:
+      - "8011:8000"
+    volumes:
+      - ./SVC-RAG/config:/app/config:ro
+    environment:
+      - CONFIG_PATH=/app/config/config.yml
+      # URL сервиса моделей (RAG-MODELS)
+      - RAG_MODELS_URL=http://rag-models:8000
+      # PostgreSQL (общая БД с backend)
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgresql}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-astrachat}
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - RAG_EMBEDDING_DIM=384
+      # OCR и LLM сервисы (для OCR PDF/картинок и L2-суммаризации)
+      - SVC_OCR_URL=http://ocr-service:8000
+      - SVC_LLM_URL=http://llm-service:8000
+    depends_on:
+      rag-models:
+        condition: service_started
+      postgresql:
+        condition: service_healthy
+      ocr-service:
+        condition: service_started
+      llm-service:
+        condition: service_started
     restart: unless-stopped
     networks:
       - astrachat-network
@@ -117,12 +246,6 @@ services:
     restart: unless-stopped
     networks:
       - astrachat-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
   # MongoDB - для хранения диалогов
   mongodb:
@@ -138,10 +261,11 @@ services:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
     networks:
       - astrachat-network
@@ -162,8 +286,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-astrachat}"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
     networks:
       - astrachat-network

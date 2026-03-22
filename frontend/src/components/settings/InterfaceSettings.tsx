@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Typography,
@@ -9,22 +10,59 @@ import {
   ListItemText,
   Switch,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
+  Tooltip,
+  Popover,
 } from '@mui/material';
 import {
   Computer as ComputerIcon,
   Notifications as NotificationsIcon,
   HelpOutline as HelpOutlineIcon,
+  Close as CloseIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import {
+  DROPDOWN_TRIGGER_BUTTON_SX,
+  DROPDOWN_CHEVRON_SX,
+  getDropdownPopoverPaperSx,
+  getDropdownItemSx,
+  DROPDOWN_ITEM_HOVER_BG,
+} from '../../constants/menuStyles';
 import { useAppActions } from '../../contexts/AppContext';
-import { 
-  isNotificationSupported, 
+import { SIDEBAR_PANEL_COLOR_KEY, DEFAULT_SIDEBAR_GRADIENT } from '../../constants/sidebarPanelColor';
+import {
+  isNotificationSupported,
   requestNotificationPermission,
   areNotificationsEnabled,
-  setNotificationsEnabled 
+  setNotificationsEnabled,
 } from '../../utils/browserNotifications';
-import { IconButton, Tooltip } from '@mui/material';
+
+const SIDEBAR_PALETTE = [
+  { name: 'По умолчанию', value: '' },
+  { name: 'Фиолетовый градиент', value: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+  { name: 'Синий', value: '#2196f3' },
+  { name: 'Тёмно-синий', value: '#1976d2' },
+  { name: 'Бирюзовый', value: '#009688' },
+  { name: 'Зелёный', value: '#4caf50' },
+  { name: 'Тёмно-зелёный', value: '#2e7d32' },
+  { name: 'Коричневый', value: '#795548' },
+  { name: 'Серый', value: '#607d8b' },
+  { name: 'Тёмно-серый', value: '#455a64' },
+  { name: 'Тёмный графит', value: '#212128' },
+  { name: 'Индиго', value: '#3f51b5' },
+  { name: 'Пурпурный', value: '#9c27b0' },
+  { name: 'Тёмно-пурпурный', value: '#673ab7' },
+  { name: 'Красно-фиолетовый', value: '#7b1fa2' },
+  { name: 'Оранжевый', value: '#ff9800' },
+  { name: 'Тёмно-оранжевый', value: '#e65100' },
+];
 
 export default function InterfaceSettings() {
+  const theme = useTheme();
+  const dropdownItemSx = useMemo(() => getDropdownItemSx(theme.palette.mode === 'dark'), [theme.palette.mode]);
   const [interfaceSettings, setInterfaceSettings] = useState(() => {
     const savedAutoTitle = localStorage.getItem('auto_generate_titles');
     const savedLargeTextAsFile = localStorage.getItem('large_text_as_file');
@@ -34,9 +72,11 @@ export default function InterfaceSettings() {
     const savedWidescreenMode = localStorage.getItem('widescreen_mode');
     const savedShowUserName = localStorage.getItem('show_user_name');
     const savedEnableNotification = localStorage.getItem('enable_notification');
-    const savedShowModelSelectorInSettings = localStorage.getItem('show_model_selector_in_settings');
     const savedUseFoldersMode = localStorage.getItem('use_folders_mode');
     const savedBrowserNotifications = localStorage.getItem('browser_notifications_enabled');
+    const savedShowDialoguesPanel = localStorage.getItem('show_dialogues_panel');
+    const savedChatInputStyle = localStorage.getItem('chat_input_style');
+    const savedSidebarColor = localStorage.getItem(SIDEBAR_PANEL_COLOR_KEY) || '';
     return {
       autoGenerateTitles: savedAutoTitle !== null ? savedAutoTitle === 'true' : true,
       largeTextAsFile: savedLargeTextAsFile !== null ? savedLargeTextAsFile === 'true' : false,
@@ -46,13 +86,74 @@ export default function InterfaceSettings() {
       widescreenMode: savedWidescreenMode !== null ? savedWidescreenMode === 'true' : false,
       showUserName: savedShowUserName !== null ? savedShowUserName === 'true' : false,
       enableNotification: savedEnableNotification !== null ? savedEnableNotification === 'true' : false,
-      showModelSelectorInSettings: savedShowModelSelectorInSettings !== null ? savedShowModelSelectorInSettings === 'true' : false,
       useFoldersMode: savedUseFoldersMode !== null ? savedUseFoldersMode === 'true' : true, // По умолчанию папки
       browserNotifications: savedBrowserNotifications !== null ? savedBrowserNotifications === 'true' : false,
+      showDialoguesPanel: savedShowDialoguesPanel !== null ? savedShowDialoguesPanel === 'true' : true,
+      chatInputStyle: (savedChatInputStyle as 'compact' | 'classic') || 'compact',
+      sidebarPanelColor: savedSidebarColor,
     };
   });
-  
+
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [stylePopoverAnchor, setStylePopoverAnchor] = useState<HTMLElement | null>(null);
+  const [colorPopoverAnchor, setColorPopoverAnchor] = useState<HTMLElement | null>(null);
+  const [modelModePopoverAnchor, setModelModePopoverAnchor] = useState<HTMLElement | null>(null);
+
+  type ModelSelectorMode = 'settings' | 'workspace' | 'workspace_agent';
+  const [modelSelectorMode, setModelSelectorModeState] = useState<ModelSelectorMode>(() => {
+    const saved = localStorage.getItem('model_selector_mode');
+    if (saved === 'settings' || saved === 'workspace' || saved === 'workspace_agent') return saved;
+    // Миграция со старого булевого ключа
+    const oldBool = localStorage.getItem('show_model_selector_in_settings');
+    return oldBool === 'true' ? 'settings' : 'workspace';
+  });
+
+  const MODEL_SELECTOR_OPTIONS: { value: ModelSelectorMode; label: string }[] = [
+    { value: 'settings', label: 'Выбор модели в настройках' },
+    { value: 'workspace', label: 'Выбор модели в рабочей зоне' },
+    { value: 'workspace_agent', label: 'Выбор модели/агента в рабочей зоне' },
+  ];
+
+  const handleModelSelectorModeChange = (mode: ModelSelectorMode) => {
+    setModelSelectorModeState(mode);
+    localStorage.setItem('model_selector_mode', mode);
+    // Синхронизируем старый ключ для обратной совместимости
+    localStorage.setItem('show_model_selector_in_settings', String(mode === 'settings'));
+    window.dispatchEvent(new Event('interfaceSettingsChanged'));
+    showNotification('success', 'Настройки интерфейса сохранены');
+    setModelModePopoverAnchor(null);
+  };
+
   const { showNotification } = useAppActions();
+
+  const handleSidebarColorSelect = (value: string) => {
+    if (value === 'pick') {
+      setColorPickerOpen(true);
+      return;
+    }
+    const newSettings = { ...interfaceSettings, sidebarPanelColor: value };
+    setInterfaceSettings(newSettings);
+    localStorage.setItem(SIDEBAR_PANEL_COLOR_KEY, value);
+    window.dispatchEvent(new CustomEvent('sidebarColorChanged', { detail: value }));
+    showNotification('success', value ? 'Цвет панелей изменён' : 'Цвет панелей сброшен');
+  };
+
+  const handlePaletteColorPick = (value: string) => {
+    const newSettings = { ...interfaceSettings, sidebarPanelColor: value };
+    setInterfaceSettings(newSettings);
+    localStorage.setItem(SIDEBAR_PANEL_COLOR_KEY, value);
+    window.dispatchEvent(new CustomEvent('sidebarColorChanged', { detail: value }));
+    setColorPickerOpen(false);
+    showNotification('success', 'Цвет панелей применён');
+  };
+
+  const handleChatInputStyleChange = (value: 'compact' | 'classic') => {
+    const newSettings = { ...interfaceSettings, chatInputStyle: value };
+    setInterfaceSettings(newSettings);
+    localStorage.setItem('chat_input_style', value);
+    window.dispatchEvent(new Event('interfaceSettingsChanged'));
+    showNotification('success', 'Стиль поля ввода изменён');
+  };
 
   const handleInterfaceSettingChange = async (key: keyof typeof interfaceSettings, value: boolean) => {
     // Для браузерных уведомлений запрашиваем разрешение при включении
@@ -79,8 +180,8 @@ export default function InterfaceSettings() {
     localStorage.setItem('widescreen_mode', String(newSettings.widescreenMode));
     localStorage.setItem('show_user_name', String(newSettings.showUserName));
     localStorage.setItem('enable_notification', String(newSettings.enableNotification));
-    localStorage.setItem('show_model_selector_in_settings', String(newSettings.showModelSelectorInSettings));
     localStorage.setItem('use_folders_mode', String(newSettings.useFoldersMode));
+    localStorage.setItem('show_dialogues_panel', String(newSettings.showDialoguesPanel));
     setNotificationsEnabled(newSettings.browserNotifications);
     
     // Отправляем кастомное событие для обновления настроек в том же окне
@@ -366,7 +467,7 @@ export default function InterfaceSettings() {
 
             <Divider />
 
-            {/* Отображать выбор модели в настройках */}
+            {/* Место расположения выбора модели */}
             <ListItem
               sx={{
                 px: 0,
@@ -374,24 +475,54 @@ export default function InterfaceSettings() {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: 2,
               }}
             >
               <ListItemText
-                primary="Отображать выбор модели в настройках"
-                primaryTypographyProps={{
-                  variant: 'body1',
-                  fontWeight: 500,
-                }}
-                secondary="Если включено, выбор модели будет в настройках, иначе в рабочей зоне"
-                secondaryTypographyProps={{
-                  variant: 'body2',
-                  sx: { mt: 0.5 }
-                }}
+                primary="Место расположения выбора модели"
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+                secondary={
+                  modelSelectorMode === 'settings'
+                    ? 'Выбор модели доступен в разделе Настройки → Модели'
+                    : modelSelectorMode === 'workspace'
+                    ? 'Кнопка выбора модели отображается в левом углу рабочей зоны'
+                    : 'Кнопка «Агент / Модель» отображается в левом углу рабочей зоны'
+                }
+                secondaryTypographyProps={{ variant: 'body2', sx: { mt: 0.5 } }}
               />
-              <Switch
-                checked={interfaceSettings.showModelSelectorInSettings}
-                onChange={(e) => handleInterfaceSettingChange('showModelSelectorInSettings', e.target.checked)}
-              />
+              <Box sx={{ minWidth: 220, flexShrink: 0 }}>
+                <Box onClick={(e) => setModelModePopoverAnchor(e.currentTarget)} sx={DROPDOWN_TRIGGER_BUTTON_SX}>
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {MODEL_SELECTOR_OPTIONS.find((o) => o.value === modelSelectorMode)?.label ?? ''}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: modelModePopoverAnchor ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
+                </Box>
+                <Popover
+                  open={Boolean(modelModePopoverAnchor)}
+                  anchorEl={modelModePopoverAnchor}
+                  onClose={() => setModelModePopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(modelModePopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    {MODEL_SELECTOR_OPTIONS.map((opt) => (
+                      <Box
+                        key={opt.value}
+                        onClick={() => handleModelSelectorModeChange(opt.value)}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: modelSelectorMode === opt.value ? 'white' : 'rgba(255,255,255,0.9)',
+                          fontWeight: modelSelectorMode === opt.value ? 600 : 400,
+                          bgcolor: modelSelectorMode === opt.value ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                        }}
+                      >
+                        {opt.label}
+                      </Box>
+                    ))}
+                  </Box>
+                </Popover>
+              </Box>
             </ListItem>
 
             <Divider />
@@ -425,9 +556,196 @@ export default function InterfaceSettings() {
                 onChange={(e) => handleInterfaceSettingChange('useFoldersMode', e.target.checked)}
               />
             </ListItem>
+
+            <Divider />
+
+            {/* Стиль поля ввода */}
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <ListItemText
+                primary="Стиль поля ввода"
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+                secondary="Компактный — пилюльная форма с кнопками внутри. Классический — прямоугольник с тулбаром кнопок снизу."
+                secondaryTypographyProps={{ variant: 'body2', sx: { mt: 0.5 } }}
+              />
+              <Box sx={{ minWidth: 180, flexShrink: 0 }}>
+                <Box onClick={(e) => setStylePopoverAnchor(e.currentTarget)} sx={DROPDOWN_TRIGGER_BUTTON_SX}>
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {interfaceSettings.chatInputStyle === 'compact' ? 'Компактный' : 'Классический'}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: stylePopoverAnchor ? 'rotate(180deg)' : 'none' }} />
+                </Box>
+                <Popover
+                  open={Boolean(stylePopoverAnchor)}
+                  anchorEl={stylePopoverAnchor}
+                  onClose={() => setStylePopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(stylePopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    {(['compact', 'classic'] as const).map((v) => (
+                      <Box
+                        key={v}
+                        onClick={() => { handleChatInputStyleChange(v); setStylePopoverAnchor(null); }}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: interfaceSettings.chatInputStyle === v ? 'white' : 'rgba(255,255,255,0.9)',
+                          fontWeight: interfaceSettings.chatInputStyle === v ? 600 : 400,
+                          bgcolor: interfaceSettings.chatInputStyle === v ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                        }}
+                      >
+                        {v === 'compact' ? 'Компактный' : 'Классический'}
+                      </Box>
+                    ))}
+                  </Box>
+                </Popover>
+              </Box>
+            </ListItem>
+
+            <Divider />
+
+            {/* Панель с диалогами (навигация по сообщениям) */}
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <ListItemText
+                primary="Панель с диалогами"
+                primaryTypographyProps={{
+                  variant: 'body1',
+                  fontWeight: 500,
+                }}
+                secondary="Вертикальная панель справа со списком вопросов для навигации по сообщениям"
+                secondaryTypographyProps={{
+                  variant: 'body2',
+                  sx: { mt: 0.5 }
+                }}
+              />
+              <Switch
+                checked={interfaceSettings.showDialoguesPanel}
+                onChange={(e) => handleInterfaceSettingChange('showDialoguesPanel', e.target.checked)}
+              />
+            </ListItem>
+
+            <Divider />
+
+            {/* Цвет боковых панелей */}
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 2,
+              }}
+            >
+              <ListItemText
+                primary="Цвет боковых панелей"
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+                secondary="Левой и правой панелей (сайдбар с чатами и панель действий)"
+                secondaryTypographyProps={{ variant: 'body2', sx: { mt: 0.5 } }}
+              />
+              <Box sx={{ minWidth: 200, flexShrink: 0 }}>
+                <Box onClick={(e) => setColorPopoverAnchor(e.currentTarget)} sx={DROPDOWN_TRIGGER_BUTTON_SX}>
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {!interfaceSettings.sidebarPanelColor
+                      ? 'По умолчанию'
+                      : interfaceSettings.sidebarPanelColor.startsWith('#')
+                        ? `Пользовательский (${interfaceSettings.sidebarPanelColor})`
+                        : 'Пользовательский'}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: colorPopoverAnchor ? 'rotate(180deg)' : 'none' }} />
+                </Box>
+                <Popover
+                  open={Boolean(colorPopoverAnchor)}
+                  anchorEl={colorPopoverAnchor}
+                  onClose={() => setColorPopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(colorPopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    <Box
+                      onClick={() => { handleSidebarColorSelect(''); setColorPopoverAnchor(null); }}
+                      sx={{
+                        ...dropdownItemSx,
+                        color: !interfaceSettings.sidebarPanelColor ? 'white' : 'rgba(255,255,255,0.9)',
+                        fontWeight: !interfaceSettings.sidebarPanelColor ? 600 : 400,
+                        bgcolor: !interfaceSettings.sidebarPanelColor ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                      }}
+                    >
+                      По умолчанию
+                    </Box>
+                    {interfaceSettings.sidebarPanelColor && (
+                      <Box
+                        onClick={() => setColorPopoverAnchor(null)}
+                        sx={{ ...dropdownItemSx, color: 'rgba(255,255,255,0.9)', bgcolor: 'transparent' }}
+                      >
+                        {interfaceSettings.sidebarPanelColor.startsWith('#')
+                          ? `Пользовательский (${interfaceSettings.sidebarPanelColor})`
+                          : 'Пользовательский'}
+                      </Box>
+                    )}
+                    <Box
+                      onClick={() => { setColorPopoverAnchor(null); setColorPickerOpen(true); }}
+                      sx={{ ...dropdownItemSx, color: 'rgba(255,255,255,0.9)', bgcolor: 'transparent' }}
+                    >
+                      Выбрать цвет
+                    </Box>
+                  </Box>
+                </Popover>
+              </Box>
+            </ListItem>
           </List>
         </CardContent>
       </Card>
+
+      {/* Модальное окно выбора цвета панелей */}
+      <Dialog open={colorPickerOpen} onClose={() => setColorPickerOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          Выберите цвет панелей
+          <IconButton onClick={() => setColorPickerOpen(false)} size="small" aria-label="Закрыть">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, pt: 1 }}>
+            {SIDEBAR_PALETTE.map((item) => (
+              <Box
+                key={item.value || 'default'}
+                onClick={() => handlePaletteColorPick(item.value)}
+                sx={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  background: item.value || DEFAULT_SIDEBAR_GRADIENT,
+                  cursor: 'pointer',
+                  border: '2px solid',
+                  borderColor: interfaceSettings.sidebarPanelColor === item.value ? 'primary.main' : 'transparent',
+                  '&:hover': { opacity: 0.9, borderColor: 'primary.light' },
+                }}
+                title={item.name}
+              />
+            ))}
+          </Box>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

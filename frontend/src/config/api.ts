@@ -23,6 +23,25 @@ export const API_ENDPOINTS = {
   DOCUMENTS_QUERY: '/api/documents/query',
   DOCUMENTS_LIST: '/api/documents',
   DOCUMENTS_DELETE: '/api/documents',
+
+  // База Знаний (Knowledge Base RAG)
+  KB_DOCUMENTS_UPLOAD: '/api/kb/documents',
+  KB_DOCUMENTS_LIST: '/api/kb/documents',
+  KB_DOCUMENTS_DELETE: '/api/kb/documents',
+
+  MEMORY_RAG_UPLOAD: '/api/memory-rag/documents',
+  MEMORY_RAG_LIST: '/api/memory-rag/documents',
+  MEMORY_RAG_DELETE: '/api/memory-rag/documents',
+
+  // RAG проектов (файлы, привязанные к конкретному проекту)
+  PROJECT_RAG_UPLOAD: (projectId: string) => `/api/project-rag/projects/${projectId}/documents`,
+  PROJECT_RAG_LIST: (projectId: string) => `/api/project-rag/projects/${projectId}/documents`,
+  PROJECT_RAG_DELETE_DOC: (projectId: string, documentId: number) =>
+    `/api/project-rag/projects/${projectId}/documents/${documentId}`,
+  PROJECT_RAG_SEARCH: (projectId: string) => `/api/project-rag/projects/${projectId}/search`,
+
+  // Управление проектами
+  PROJECT_DELETE: (projectId: string) => `/api/projects/${projectId}`,
   
   // Модели
   MODELS: '/api/models',

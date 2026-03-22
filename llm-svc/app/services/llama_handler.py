@@ -1,16 +1,21 @@
 from llama_cpp import Llama
 from typing import List, Dict, Any, Optional, Callable, AsyncGenerator, Union
+import os
 import json
 import asyncio
 import time
 import logging
 
-from app.models.schemas import ChatResponse, ChatChoice, Message, UsageInfo
-from app.utils import convert_to_dict_messages, convert_to_chat_completion_messages
+from app.models.schemas import ChatResponse, ChatChoice, Message, AssistantMessage, UsageInfo
+from app.utils import convert_to_dict_messages
 from app.core.config import settings
 from app.services.base_llm_handler import BaseLLMHandler
 
 logger = logging.getLogger(__name__)
+
+# Таймаут загрузки модели (сек). Большие модели на CPU при нехватке RAM могут "зависать" навсегда.
+# 30B Q8 на CPU без GPU требует ~32GB RAM; при свопе процесс выглядит зависшим.
+MODEL_LOAD_TIMEOUT = int(os.environ.get("LLM_MODEL_LOAD_TIMEOUT", "600"))
 
 
 class LlamaHandler(BaseLLMHandler):
@@ -48,10 +53,10 @@ class LlamaHandler(BaseLLMHandler):
             print(f"🔊 Verbose: {self.verbose}")
             print("-" * 80)
             print("⏳ Loading model...")
-            
-            logger.info(f"Loading model from {self.model_path}")
+            logger.info(f"Loading model from {self.model_path} (timeout={MODEL_LOAD_TIMEOUT}s)")
+
             loop = asyncio.get_event_loop()
-            self.model = await loop.run_in_executor(
+            load_task = loop.run_in_executor(
                 None,
                 lambda: Llama(
                     model_path=self.model_path,
@@ -59,9 +64,23 @@ class LlamaHandler(BaseLLMHandler):
                     n_threads_batch=7,
                     n_ctx=self.n_ctx,
                     n_gpu_layers=self.n_gpu_layers,
-                    verbose=self.verbose
+                    verbose=True,  # при загрузке всегда verbose — видно прогресс или зависание
                 )
             )
+            try:
+                self.model = await asyncio.wait_for(load_task, timeout=MODEL_LOAD_TIMEOUT)
+            except asyncio.TimeoutError:
+                load_task.cancel()
+                msg = (
+                    f"Загрузка модели не завершилась за {MODEL_LOAD_TIMEOUT} с. "
+                    "Чаще всего это нехватка RAM: модель 30B Q8 требует ~32 ГБ. "
+                    "Проверьте: docker stats (память контейнера), включите GPU (gpu_layers: -1 в конфиге), "
+                    "или используйте модель меньше (например 7B–8B). Таймаут задаётся переменной LLM_MODEL_LOAD_TIMEOUT."
+                )
+                logger.error(msg)
+                print("❌ " + msg)
+                raise RuntimeError(msg)
+
             self.is_initialized = True
             print("✅ llama.cpp model loaded successfully!")
             print("=" * 80)
@@ -97,16 +116,7 @@ class LlamaHandler(BaseLLMHandler):
                 stream=stream
             )
 
-        try:
-            # Пробуем использовать формат словарей
-            return await self._run_in_executor(lambda: create_completion(convert_to_dict_messages))
-        except TypeError as e:
-            if "Expected type" in str(e) and "got 'list[dict" in str(e):
-                # Если возникает ошибка типа, пробуем использовать правильные типы сообщений
-                logger.info("Falling back to typed messages for chat completion")
-                return await self._run_in_executor(lambda: create_completion(convert_to_chat_completion_messages))
-            else:
-                raise e
+        return await self._run_in_executor(lambda: create_completion(convert_to_dict_messages))
 
     async def generate_response(self, messages: List[Message],
                                 temperature: Optional[float] = None,
@@ -171,7 +181,7 @@ class LlamaHandler(BaseLLMHandler):
             choices=[
                 ChatChoice(
                     index=0,
-                    message=Message(
+                    message=AssistantMessage(
                         role=message["role"],
                         content=message["content"]
                     ),
@@ -192,3 +202,47 @@ class LlamaHandler(BaseLLMHandler):
         self.model = None
         self.is_initialized = False
         logger.info("Model resources cleaned up")
+
+    async def load_model(self, model_name: str) -> bool:
+        """Алиас для совместимости с эндпоинтом /models/load."""
+        return await self.load_model_by_name(model_name)
+
+    async def load_model_by_name(self, model_name: str) -> bool:
+        """
+        Переключение на другую модель по имени (имя файла без .gguf).
+        Путь к файлу: /app/models/llm/{model_name}.gguf
+        """
+        import os
+        # Санитизация: только базовое имя, без пути и без .gguf
+        model_name = os.path.basename(model_name).strip()
+        if model_name.lower().endswith(".gguf"):
+            model_name = model_name[:-5]
+        if not model_name:
+            logger.error("load_model_by_name: пустое имя модели")
+            return False
+        models_dir = "/app/models/llm"
+        model_path = os.path.join(models_dir, f"{model_name}.gguf")
+        if not os.path.exists(model_path):
+            logger.error(f"Model file not found: {model_path}")
+            return False
+        if self.model_name == model_name and self.is_loaded():
+            logger.info(f"Model {model_name} already loaded")
+            return True
+        try:
+            await self.cleanup()
+            self.model_path = model_path
+            self.model_name = model_name
+            await self.initialize()
+            logger.info(f"Switched to model: {model_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load model {model_name}: {e}")
+            # Восстанавливаем предыдущую модель из конфига, чтобы сервис не оставался в 503
+            try:
+                self.model_path = settings.model.path
+                self.model_name = settings.model.name
+                await self.initialize()
+                logger.info(f"Restored default model: {self.model_name}")
+            except Exception as restore_e:
+                logger.error(f"Failed to restore default model: {restore_e}")
+            return False

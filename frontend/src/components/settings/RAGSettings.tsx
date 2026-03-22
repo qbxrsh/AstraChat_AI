@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Typography,
@@ -7,27 +8,41 @@ import {
   List,
   ListItem,
   ListItemText,
-  FormControl,
-  Select,
-  MenuItem,
   IconButton,
   Tooltip,
   Alert,
+  Popover,
+  Button,
+  Divider,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   HelpOutline as HelpOutlineIcon,
+  ExpandMore as ExpandMoreIcon,
+  LibraryBooks as LibraryBooksIcon,
 } from '@mui/icons-material';
 import { useAppActions } from '../../contexts/AppContext';
 import { getApiUrl } from '../../config/api';
+import {
+  DROPDOWN_TRIGGER_BUTTON_SX,
+  DROPDOWN_CHEVRON_SX,
+  getDropdownPopoverPaperSx,
+  getDropdownItemSx,
+  DROPDOWN_ITEM_HOVER_BG,
+} from '../../constants/menuStyles';
+import MemoryRagLibraryModal from '../MemoryRagLibraryModal';
 
 type RAGStrategy = 'auto' | 'reranking' | 'hierarchical' | 'hybrid' | 'standard';
 
 interface RAGSettingsProps {}
 
 export default function RAGSettings({}: RAGSettingsProps) {
+  const theme = useTheme();
+  const dropdownItemSx = useMemo(() => getDropdownItemSx(theme.palette.mode === 'dark'), [theme.palette.mode]);
   const [selectedStrategy, setSelectedStrategy] = useState<RAGStrategy>('auto');
   const [isLoading, setIsLoading] = useState(false);
+  const [strategyPopoverAnchor, setStrategyPopoverAnchor] = useState<HTMLElement | null>(null);
+  const [memoryRagModalOpen, setMemoryRagModalOpen] = useState(false);
   const { showNotification } = useAppActions();
 
   useEffect(() => {
@@ -185,6 +200,65 @@ export default function RAGSettings({}: RAGSettingsProps) {
               <ListItemText
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    Управление документами
+                    <Tooltip
+                      title="Загрузка PDF, Word, Excel, TXT в библиотеку памяти (MinIO + pgvector). Подключение поиска к ответам — в зоне ввода сообщения кнопкой «Подключить базу знаний»."
+                      arrow
+                    >
+                      <IconButton
+                        size="small"
+                        sx={{
+                          p: 0,
+                          ml: 0.5,
+                          opacity: 0.7,
+                          '&:hover': {
+                            opacity: 1,
+                            '& .MuiSvgIcon-root': {
+                              color: 'primary.main',
+                            },
+                          },
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Справка по библиотеке документов"
+                      >
+                        <HelpOutlineIcon fontSize="small" color="action" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                }
+                primaryTypographyProps={{
+                  variant: 'body1',
+                  fontWeight: 500,
+                }}
+              />
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<LibraryBooksIcon />}
+                onClick={() => setMemoryRagModalOpen(true)}
+                sx={{
+                  textTransform: 'none',
+                  minWidth: 180,
+                }}
+              >
+                Открыть базу данных
+              </Button>
+            </ListItem>
+
+            <Divider />
+
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     Стратегия поиска
                     <Tooltip 
                       title="Выберите стратегию поиска по документам. Каждая стратегия имеет свои преимущества и подходит для разных задач." 
@@ -215,22 +289,46 @@ export default function RAGSettings({}: RAGSettingsProps) {
                   fontWeight: 500,
                 }}
               />
-              <FormControl variant="outlined" size="small" sx={{ minWidth: 280 }}>
-                <Select
-                  value={selectedStrategy}
-                  onChange={handleStrategyChange}
-                  disabled={isLoading}
+              <Box sx={{ minWidth: 280 }}>
+                <Box
+                  onClick={(e) => !isLoading && setStrategyPopoverAnchor(e.currentTarget)}
                   sx={{
-                    textTransform: 'none',
+                    ...DROPDOWN_TRIGGER_BUTTON_SX,
+                    opacity: isLoading ? 0.7 : 1,
+                    pointerEvents: isLoading ? 'none' : 'auto',
                   }}
                 >
-                  <MenuItem value="auto">Автоматический выбор</MenuItem>
-                  <MenuItem value="reranking">Reranking (переранжирование)</MenuItem>
-                  <MenuItem value="hierarchical">Иерархический поиск</MenuItem>
-                  <MenuItem value="hybrid">Гибридный поиск</MenuItem>
-                  <MenuItem value="standard">Стандартный поиск</MenuItem>
-                </Select>
-              </FormControl>
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {getStrategyLabel(selectedStrategy)}
+                  </Typography>
+                  <ExpandMoreIcon sx={{ ...DROPDOWN_CHEVRON_SX, transform: strategyPopoverAnchor ? 'rotate(180deg)' : 'none' }} />
+                </Box>
+                <Popover
+                  open={Boolean(strategyPopoverAnchor)}
+                  anchorEl={strategyPopoverAnchor}
+                  onClose={() => setStrategyPopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(strategyPopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    {(['auto', 'reranking', 'hierarchical', 'hybrid', 'standard'] as const).map((strategy) => (
+                      <Box
+                        key={strategy}
+                        onClick={() => { setSelectedStrategy(strategy); setStrategyPopoverAnchor(null); }}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: selectedStrategy === strategy ? 'white' : 'rgba(255,255,255,0.9)',
+                          fontWeight: selectedStrategy === strategy ? 600 : 400,
+                          bgcolor: selectedStrategy === strategy ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                        }}
+                      >
+                        {getStrategyLabel(strategy)}
+                      </Box>
+                    ))}
+                  </Box>
+                </Popover>
+              </Box>
             </ListItem>
           </List>
 
@@ -258,6 +356,8 @@ export default function RAGSettings({}: RAGSettingsProps) {
           </Alert>
         </CardContent>
       </Card>
+
+      <MemoryRagLibraryModal open={memoryRagModalOpen} onClose={() => setMemoryRagModalOpen(false)} />
     </Box>
   );
 }
