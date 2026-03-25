@@ -26,6 +26,10 @@ vosk==0.3.45
 whisperx>=3.1.1
 pyannote.audio>=3.1.1
 
+# LLM зависимости
+llama-cpp-python>=0.3.16
+vllm>=0.6.0  
+
 # ── Tests 
 pytest==8.4.1
 pytest-asyncio==1.1.0
