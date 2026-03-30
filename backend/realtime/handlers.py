@@ -403,6 +403,17 @@ async def _handle_multi_llm(
         implicit_global_corpus=False,
     )
     if canned:
+        # Иначе фронт не получит total_models (ожидается в multi_llm_start) и зависнет индикатор загрузки
+        if multi_llm_models:
+            await sio.emit(
+                "multi_llm_start",
+                {
+                    "model": multi_llm_models[0],
+                    "models": multi_llm_models,
+                    "total_models": len(multi_llm_models),
+                },
+                room=sid,
+            )
         for i, model_name in enumerate(multi_llm_models):
             await sio.emit(
                 "multi_llm_complete",
@@ -419,7 +430,15 @@ async def _handle_multi_llm(
 
     async def _gen_one(model_name: str):
         try:
-            await sio.emit("multi_llm_start", {"model": model_name, "models": multi_llm_models}, room=sid)
+            await sio.emit(
+                "multi_llm_start",
+                {
+                    "model": model_name,
+                    "models": multi_llm_models,
+                    "total_models": len(multi_llm_models),
+                },
+                room=sid,
+            )
 
             if model_name.startswith("llm-svc://"):
                 model_path = model_name
@@ -454,7 +473,10 @@ async def _handle_multi_llm(
         except Exception as e:
             return {"model": model_name, "response": f"Ошибка: {e}", "error": True}
 
-    results = await asyncio.gather(*[_gen_one(m) for m in multi_llm_models], return_exceptions=True)
+    # Один контейнер llm-svc держит одну загруженную модель: параллельный gather даёт гонку load/chat.
+    results: list = []
+    for m in multi_llm_models:
+        results.append(await _gen_one(m))
 
     for i, result in enumerate(results):
         if isinstance(result, Exception):

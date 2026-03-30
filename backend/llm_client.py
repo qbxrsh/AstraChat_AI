@@ -16,9 +16,11 @@ import os
 
 def resolve_llm_svc_model_id_for_request(model_path: Optional[str], fallback_model_name: str) -> str:
     """
-    Из пути llm-svc://<id> получает <id> для JSON model в /v1/chat/completions.
-    Частая опечатка: 1lm-svc:// (цифра 1) — иначе startswith('llm-svc') не срабатывает
-    и в запрос уходит глобально загруженная модель (QVikhr и т.д.).
+    Получает <id> для JSON model в /v1/chat/completions и для POST /v1/models/load.
+
+    - llm-svc://<id> (и опечатка 1lm-svc://) → <id>
+    - models/<name> или путь к .gguf → имя файла без .gguf (как в GET /v1/models)
+    - иначе → fallback (имя загруженной в llm-svc модели из health)
     """
     if not model_path or not str(model_path).strip():
         return fallback_model_name
@@ -29,6 +31,20 @@ def resolve_llm_svc_model_id_for_request(model_path: Optional[str], fallback_mod
         low = s.lower()
     if low.startswith("llm-svc://"):
         return s[10:]
+    # Multi-LLM / выбор с диска: backend передаёт models/<id> без префикса llm-svc://
+    norm = s.replace("\\", "/")
+    base = os.path.basename(norm.rstrip("/"))
+    if base and base not in (".", ".."):
+        if base.lower().endswith(".gguf"):
+            base = base[:-5]
+        looks_like_filesystem_path = (
+            low.startswith("models/")
+            or "/models/" in low
+            or low.endswith(".gguf")
+            or ("/" in norm)
+        )
+        if looks_like_filesystem_path:
+            return base
     return fallback_model_name
 
 

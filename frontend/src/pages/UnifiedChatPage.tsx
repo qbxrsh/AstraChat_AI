@@ -629,6 +629,25 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     timestamp: string;
   }>>([]);
   const currentMultiLLMRequestRef = useRef<string | null>(null);
+  const prevAgentModeRef = useRef<string | undefined>(undefined);
+  const skipNextMultiLlmChatResetRef = useRef(false);
+
+  const loadAgentStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`${getApiUrl('/api/agent/status')}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAgentStatus((prev) => {
+          if (JSON.stringify(prev) !== JSON.stringify(data)) {
+            return data;
+          }
+          return prev;
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Убираем автоматическое создание чатов - чаты создаются только по кнопке
 
@@ -790,58 +809,48 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     inputRef.current?.focus();
   }, []);
 
-  // Загружаем статус агента и модели при инициализации
   useEffect(() => {
-    const loadAgentStatus = async () => {
-      try {
-        const response = await fetch(`${getApiUrl('/api/agent/status')}`);
-        if (response.ok) {
-          const data = await response.json();
-          // Обновляем ТОЛЬКО если данные изменились (предотвращаем лишние ререндеры)
-          setAgentStatus(prev => {
-            if (JSON.stringify(prev) !== JSON.stringify(data)) {
-              return data;
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
-      }
-    };
-
-    const loadAvailableModels = async () => {
+    const loadAvailableModelsOnce = async () => {
       try {
         const response = await fetch(`${getApiUrl('/api/models/available')}`);
         if (response.ok) {
           const data = await response.json();
           const newModels = data.models || [];
-          // Обновляем ТОЛЬКО если данные изменились
-          setAvailableModels(prev => {
+          setAvailableModels((prev) => {
             if (JSON.stringify(prev) !== JSON.stringify(newModels)) {
               return newModels;
             }
             return prev;
           });
         }
-      } catch (error) {
+      } catch {
+        /* ignore */
       }
     };
 
     loadAgentStatus();
-    loadAvailableModels();
-    
-    // Периодически обновляем статус, но реже (30 сек вместо 5)
-    // Это предотвращает лишние ререндеры
+    loadAvailableModelsOnce();
+
+    const onAgentChange = () => {
+      loadAgentStatus();
+    };
+    window.addEventListener('astrachatAgentStatusChanged', onAgentChange);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        loadAgentStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
     const interval = setInterval(() => {
       loadAgentStatus();
-      // Обновляем модели только в режиме multi-llm
-      if (agentStatus?.mode === 'multi-llm') {
-        loadAvailableModels();
-      }
-    }, 30000); // Увеличено с 5000 до 30000 (30 секунд)
-    
-    return () => clearInterval(interval);
-  }, [agentStatus?.mode]);
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('astrachatAgentStatusChanged', onAgentChange);
+      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(interval);
+    };
+  }, [loadAgentStatus]);
 
   // Загружаем модели отдельно при переключении на режим multi-llm
   useEffect(() => {
@@ -863,6 +872,32 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     }
   }, [agentStatus?.mode]);
 
+  useEffect(() => {
+    if (skipNextMultiLlmChatResetRef.current) {
+      skipNextMultiLlmChatResetRef.current = false;
+      return;
+    }
+    setConversationHistory([]);
+    currentMultiLLMRequestRef.current = null;
+    setModelWindows((prev) =>
+      prev.length === 0
+        ? [{ id: '1', selectedModel: '', response: '', isStreaming: false }]
+        : prev.map((w) => ({ ...w, response: '', isStreaming: false, error: false }))
+    );
+  }, [state.currentChatId]);
+
+  // После переключения режима с multi-llm на другой — убираем многоколоночный layout со страницы чата
+  useEffect(() => {
+    const mode = agentStatus?.mode;
+    const prev = prevAgentModeRef.current;
+    if (prev === 'multi-llm' && mode && mode !== 'multi-llm') {
+      setModelWindows([{ id: '1', selectedModel: '', response: '', isStreaming: false }]);
+      setConversationHistory([]);
+      currentMultiLLMRequestRef.current = null;
+    }
+    prevAgentModeRef.current = mode;
+  }, [agentStatus?.mode]);
+
   // Подписка на событие остановки генерации и завершения генерации
   useEffect(() => {
     if (!socket) return;
@@ -874,39 +909,43 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       // Также обновляем состояние сообщений в истории
       setConversationHistory(prev => {
         if (prev.length === 0) return prev;
-        const updated = [...prev];
-        const lastIndex = updated.length - 1;
-        if (updated[lastIndex]) {
-          updated[lastIndex] = {
-            ...updated[lastIndex],
-            responses: updated[lastIndex].responses.map(r => ({ ...r, isStreaming: false }))
-          };
-        }
-        return updated;
+        const lastIndex = prev.length - 1;
+        const last = prev[lastIndex];
+        if (!last) return prev;
+        const next = [...prev];
+        next[lastIndex] = {
+          ...last,
+          responses: last.responses.map(r => ({ ...r, isStreaming: false })),
+        };
+        return next;
       });
     };
     
     const handleChatComplete = (data: any) => {
+      // В multi-llm бэкенд не шлёт chat_complete; если событие пришло откуда-то ещё — не сбрасываем окна
+      if (agentStatus?.mode === 'multi-llm') {
+        return;
+      }
       // Когда генерация завершена, обновляем состояние всех окон моделей
-      
+
       setModelWindows(prev => {
         const updated = prev.map(w => ({ ...w, isStreaming: false }));
-        
+
         return updated;
       });
       
       // Также обновляем состояние сообщений в истории
       setConversationHistory(prev => {
         if (prev.length === 0) return prev;
-        const updated = [...prev];
-        const lastIndex = updated.length - 1;
-        if (updated[lastIndex]) {
-          updated[lastIndex] = {
-            ...updated[lastIndex],
-            responses: updated[lastIndex].responses.map(r => ({ ...r, isStreaming: false }))
-          };
-        }
-        return updated;
+        const lastIndex = prev.length - 1;
+        const last = prev[lastIndex];
+        if (!last) return prev;
+        const next = [...prev];
+        next[lastIndex] = {
+          ...last,
+          responses: last.responses.map(r => ({ ...r, isStreaming: false })),
+        };
+        return next;
       });
     };
     
@@ -920,7 +959,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       socket.off('generation_stopped', handleGenerationStopped);
       socket.off('chat_complete', handleChatComplete);
     };
-  }, [socket]);
+  }, [socket, agentStatus?.mode]);
 
   // Подписка на события Socket.IO для режима multi-llm
   useEffect(() => {
@@ -950,22 +989,22 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       setConversationHistory(prev => {
         if (prev.length === 0) return prev;
         const lastIndex = prev.length - 1;
-        const updated = [...prev];
-        const existingResponseIndex = updated[lastIndex].responses.findIndex(r => r.model === modelName);
-        
+        const last = prev[lastIndex];
+        const responses = [...last.responses];
+        const existingResponseIndex = responses.findIndex(r => r.model === modelName);
+
         if (existingResponseIndex >= 0) {
-          updated[lastIndex].responses[existingResponseIndex] = {
-            ...updated[lastIndex].responses[existingResponseIndex],
-            content: accumulated
+          responses[existingResponseIndex] = {
+            ...responses[existingResponseIndex],
+            content: accumulated,
           };
         } else {
-          updated[lastIndex].responses.push({
-            model: modelName,
-            content: accumulated
-          });
+          responses.push({ model: modelName, content: accumulated });
         }
-        
-        return updated;
+
+        const next = [...prev];
+        next[lastIndex] = { ...last, responses };
+        return next;
       });
       
       // Обновляем состояние окна для потоковой генерации
@@ -982,28 +1021,26 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       const response = data.response || '';
       const hasError = data.error || false;
       
-      // Обновляем ответ в истории
       setConversationHistory(prev => {
         if (prev.length === 0) return prev;
         const lastIndex = prev.length - 1;
-        const updated = [...prev];
-        const existingResponseIndex = updated[lastIndex].responses.findIndex(r => r.model === modelName);
-        
+        const last = prev[lastIndex];
+        const responses = [...last.responses];
+        const existingResponseIndex = responses.findIndex(r => r.model === modelName);
+
         if (existingResponseIndex >= 0) {
-          updated[lastIndex].responses[existingResponseIndex] = {
+          responses[existingResponseIndex] = {
             model: modelName,
             content: response,
-            error: hasError
+            error: hasError,
           };
         } else {
-          updated[lastIndex].responses.push({
-            model: modelName,
-            content: response,
-            error: hasError
-          });
+          responses.push({ model: modelName, content: response, error: hasError });
         }
-        
-        return updated;
+
+        const next = [...prev];
+        next[lastIndex] = { ...last, responses };
+        return next;
       });
       
       // Обновляем состояние окна - завершаем стриминг
@@ -1078,11 +1115,11 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       showNotification('warning', 'Должна остаться хотя бы одна модель');
       return;
     }
-    setModelWindows(modelWindows.filter(w => w.id !== id));
+    setModelWindows((prev) => prev.filter((w) => w.id !== id));
   };
 
   const updateModelWindow = (id: string, updates: Partial<ModelWindow>): void => {
-    setModelWindows(modelWindows.map(w => w.id === id ? { ...w, ...updates } : w));
+    setModelWindows((prev) => prev.map((w) => (w.id === id ? { ...w, ...updates } : w)));
   };
 
   const getSelectedModels = (): string[] => {
@@ -1112,14 +1149,20 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       return;
     }
 
-    // Сохраняем сообщение пользователя в историю
-    setConversationHistory([
-      ...conversationHistory,
+    let chatId = currentChat?.id;
+    if (!chatId) {
+      chatId = createChat('Новый чат');
+      skipNextMultiLlmChatResetRef.current = true;
+      setCurrentChat(chatId);
+    }
+
+    setConversationHistory((prev) => [
+      ...prev,
       {
         userMessage: inputMessage.trim(),
         responses: [],
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     ]);
 
     // Устанавливаем состояние генерации для всех выбранных окон
@@ -1146,12 +1189,8 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       // Сообщение будет обработано через SocketContext, который отследит режим multi-llm
       // и разошлет запросы ко всем выбранным моделям
       
-      // Временно используем обычный sendMessage, но нужно будет модифицировать SocketContext
-      // для работы с выбранными моделями напрямую в чате
-      if (currentChat) {
-        sendMessage(inputMessage.trim(), currentChat.id);
-      }
-      
+      sendMessage(inputMessage.trim(), chatId);
+
       setInputMessage('');
       
       // Возвращаем фокус на поле ввода
@@ -2225,9 +2264,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                                     }}
                                   />
                                 )
-                              ) : (
+                                ) : (
                                 idx === conversationHistory.length - 1 && isStreaming ? (
-                                  // Анимация "думает..." для текущей генерации
+                                  // Анимация "думает..." для текущей генерации (есть чанки / явный стриминг окна)
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                                       <Box
@@ -2279,6 +2318,22 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                                       думает...
                                     </Typography>
                                   </Box>
+                                ) : idx === conversationHistory.length - 1 &&
+                                  state.isLoading &&
+                                  window.selectedModel &&
+                                  !isStreaming &&
+                                  modelWindows.some(
+                                    (w) => w.isStreaming && w.selectedModel && w.selectedModel !== window.selectedModel
+                                  ) ? (
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                    Ожидание очереди… Сейчас отвечает другая модель в multi-LLM.
+                                  </Typography>
+                                ) : idx === conversationHistory.length - 1 &&
+                                  state.isLoading &&
+                                  window.selectedModel ? (
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                    Ожидание ответа… Первая загрузка весов в llm-svc может занять до минуты.
+                                  </Typography>
                                 ) : (
                                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                                     Модель не отвечала
