@@ -587,6 +587,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     setCurrentChat,
     updateChatTitle,
     getProjectById,
+    setLoading,
   } = useAppActions();
   const { sendMessage, regenerateResponse, isConnected, isConnecting, stopGeneration, socket, onMultiLLMEvent, offMultiLLMEvent } = useSocket();
 
@@ -631,6 +632,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   const currentMultiLLMRequestRef = useRef<string | null>(null);
   const prevAgentModeRef = useRef<string | undefined>(undefined);
   const skipNextMultiLlmChatResetRef = useRef(false);
+  const lastMultiLlmPostedKeyRef = useRef<string>('');
 
   const loadAgentStatus = useCallback(async () => {
     try {
@@ -852,24 +854,21 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     };
   }, [loadAgentStatus]);
 
-  // Загружаем модели отдельно при переключении на режим multi-llm
+  // Список GGUF для multi-llm и после выхода из multi-llm
   useEffect(() => {
-    if (agentStatus?.mode === 'multi-llm') {
-      const loadAvailableModels = async () => {
-        try {
-          const response = await fetch(`${getApiUrl('/api/models/available')}`);
-          if (response.ok) {
-            const data = await response.json();
-            setAvailableModels(data.models || []);
-          } else {
-            
-          }
-        } catch (error) {
+    if (!agentStatus?.mode) return;
+    const loadAvailableModels = async () => {
+      try {
+        const response = await fetch(`${getApiUrl('/api/models/available')}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableModels(data.models || []);
         }
-      };
-      
-      loadAvailableModels();
-    }
+      } catch {
+        /* ignore */
+      }
+    };
+    loadAvailableModels();
   }, [agentStatus?.mode]);
 
   useEffect(() => {
@@ -896,6 +895,12 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       currentMultiLLMRequestRef.current = null;
     }
     prevAgentModeRef.current = mode;
+  }, [agentStatus?.mode]);
+
+  useEffect(() => {
+    if (agentStatus?.mode !== 'multi-llm') {
+      lastMultiLlmPostedKeyRef.current = '';
+    }
   }, [agentStatus?.mode]);
 
   // Подписка на событие остановки генерации и завершения генерации
@@ -1165,24 +1170,30 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       },
     ]);
 
-    // Устанавливаем состояние генерации для всех выбранных окон
-    modelWindows.forEach(window => {
-      if (window.selectedModel) {
-        updateModelWindow(window.id, { response: '', isStreaming: true, error: false });
-      }
-    });
+    // Одним setState для всех окон — иначе несколько updateModelWindow подряд могут
+    // из-за батчинга оставить isStreaming: true только у последнего окна.
+    setModelWindows((prev) =>
+      prev.map((w) =>
+        w.selectedModel ? { ...w, response: '', isStreaming: true, error: false } : w
+      )
+    );
 
-    // Отправляем запрос на сервер с выбранными моделями
+    setLoading(true);
+
+    const modelsKey = [...selectedModels].sort().join('\u0001');
+
     try {
-      // Устанавливаем модели в оркестраторе
-      const response = await fetch(`${getApiUrl('/api/agent/multi-llm/models')}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ models: selectedModels }),
-      });
+      if (lastMultiLlmPostedKeyRef.current !== modelsKey) {
+        const response = await fetch(`${getApiUrl('/api/agent/multi-llm/models')}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ models: selectedModels }),
+        });
 
-      if (!response.ok) {
-        throw new Error('Не удалось установить модели');
+        if (!response.ok) {
+          throw new Error('Не удалось установить модели');
+        }
+        lastMultiLlmPostedKeyRef.current = modelsKey;
       }
 
       // Отправляем сообщение через Socket.IO
@@ -1198,7 +1209,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
         inputRef.current?.focus();
       }, 10);
     } catch (error) {
-      
+      setLoading(false);
+      setModelWindows((prev) => prev.map((w) => ({ ...w, isStreaming: false })));
+      setConversationHistory((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
       showNotification('error', 'Ошибка отправки сообщения');
     }
   };
@@ -2161,6 +2174,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
 
   // Если режим multi-llm, показываем специальный UI
   if (agentStatus?.mode === 'multi-llm') {
+    const anyMultiWindowStreaming = modelWindows.some((w) => w.isStreaming && !!w.selectedModel);
+    const multiLlmWaitingUi = state.isLoading || anyMultiWindowStreaming;
+
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
         {/* Основная область с окнами моделей */}
@@ -2237,6 +2253,8 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                   ) : (
                     conversationHistory.map((conv, idx) => {
                       const response = conv.responses.find(r => r.model === window.selectedModel);
+                      const responseHasText =
+                        !!response && (response.content ?? '').trim().length > 0;
                       return (
                         <Box key={idx} sx={{ mb: 2 }}>
                           {/* Сообщение пользователя */}
@@ -2249,12 +2267,11 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                           {/* Ответ модели */}
                           <Card sx={{ bgcolor: response?.error ? 'error.light' : 'background.paper' }}>
                             <CardContent sx={{ p: 1.5 }}>
-                              {response ? (
-                                response.error ? (
+                              {response?.error ? (
                                   <Alert severity="error" sx={{ mb: 0 }}>
                                     <Typography variant="body2">{response.content}</Typography>
                                   </Alert>
-                                ) : (
+                                ) : responseHasText ? (
                                   <MessageRenderer 
                                     content={response.content}
                                     onSendMessage={(prompt) => {
@@ -2263,10 +2280,12 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                                       }
                                     }}
                                   />
-                                )
                                 ) : (
-                                idx === conversationHistory.length - 1 && isStreaming ? (
-                                  // Анимация "думает..." для текущей генерации (есть чанки / явный стриминг окна)
+                                idx === conversationHistory.length - 1 &&
+                                  window.selectedModel &&
+                                  multiLlmWaitingUi &&
+                                  modelWindows.some((w) => w.isStreaming && !!w.selectedModel) ? (
+                                  // Multi-LLM: бэкенд шлёт обе модели параллельно; «очереди» нет — ждём токены этой колонки
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                                       <Box
@@ -2319,17 +2338,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                                     </Typography>
                                   </Box>
                                 ) : idx === conversationHistory.length - 1 &&
-                                  state.isLoading &&
-                                  window.selectedModel &&
-                                  !isStreaming &&
-                                  modelWindows.some(
-                                    (w) => w.isStreaming && w.selectedModel && w.selectedModel !== window.selectedModel
-                                  ) ? (
-                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                    Ожидание очереди… Сейчас отвечает другая модель в multi-LLM.
-                                  </Typography>
-                                ) : idx === conversationHistory.length - 1 &&
-                                  state.isLoading &&
+                                  multiLlmWaitingUi &&
                                   window.selectedModel ? (
                                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                                     Ожидание ответа… Первая загрузка весов в llm-svc может занять до минуты.

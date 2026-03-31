@@ -214,7 +214,7 @@ def reload_model_by_path(model_path):
             try:
                 async def _load_on_llm_svc():
                     service = await get_llm_service()
-                    ok = await service.client.load_model(model_name)
+                    ok = await service.client.load_model_if_needed(model_name)
                     if ok:
                         service.model_name = model_name
                         logger.info(f"[llm-svc] Обновлён model_name в бэкенде: {model_name}")
@@ -246,12 +246,14 @@ def reload_model_by_path(model_path):
             try:
                 async def _load_resolved():
                     service = await get_llm_service()
-                    ok = await service.client.load_model(resolved_id)
+                    ok = await service.client.load_model_if_needed(resolved_id)
                     if ok:
                         service.model_name = resolved_id
                         global _selected_model_name
                         _selected_model_name = resolved_id
-                        logger.info(f"[llm-svc] Загружена модель по пути {model_path!r} → id={resolved_id!r}")
+                        logger.info(
+                            f"[llm-svc] Multi-LLM: модель готова к вызову {resolved_id!r} (путь {model_path!r})"
+                        )
                     return ok
 
                 try:
