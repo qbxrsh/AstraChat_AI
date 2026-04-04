@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   TextField,
@@ -22,7 +22,7 @@ import {
   MenuItem,
   Slider,
   CircularProgress,
-  Menu,
+  Popover,
   Collapse,
   Drawer,
   Divider,
@@ -60,6 +60,7 @@ import {
   AutoStories as KbIcon,
   SmartToy as AgentConstructorIcon,
   YouTube as YouTubeIcon,
+  Slideshow as PresentationIcon,
 } from '@mui/icons-material';
 import { useAppContext, useAppActions, Message } from '../contexts/AppContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -81,6 +82,17 @@ import {
   setKnowledgeRagEnabled,
   KNOWLEDGE_RAG_STORAGE_EVENT,
 } from '../utils/knowledgeRagStorage';
+import {
+  ASTRA_TRIGGER_ATTACH,
+  ASTRA_OPEN_AGENT_CONSTRUCTOR,
+  ASTRA_OPEN_TRANSCRIPTION_SIDEBAR,
+} from '../constants/hotkeys';
+import {
+  getDropdownPanelSx,
+  getDropdownItemSx,
+  MENU_ACTION_TEXT_SIZE,
+  CHAT_GEAR_MENU_PANEL_WIDTH_PX,
+} from '../constants/menuStyles';
 
 interface UnifiedChatPageProps {
   isDarkMode: boolean;
@@ -570,6 +582,31 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    const onAttach = () => fileInputRef.current?.click();
+    window.addEventListener(ASTRA_TRIGGER_ATTACH, onAttach);
+    return () => window.removeEventListener(ASTRA_TRIGGER_ATTACH, onAttach);
+  }, []);
+
+  useEffect(() => {
+    const onAgent = () => {
+      setRightSidebarHidden(false);
+      setRightSidebarOpen(true);
+      setAgentConstructorOpen(true);
+    };
+    const onTranscription = () => {
+      setRightSidebarHidden(false);
+      setRightSidebarOpen(true);
+      setTranscriptionMenuOpen(true);
+    };
+    window.addEventListener(ASTRA_OPEN_AGENT_CONSTRUCTOR, onAgent);
+    window.addEventListener(ASTRA_OPEN_TRANSCRIPTION_SIDEBAR, onTranscription);
+    return () => {
+      window.removeEventListener(ASTRA_OPEN_AGENT_CONSTRUCTOR, onAgent);
+      window.removeEventListener(ASTRA_OPEN_TRANSCRIPTION_SIDEBAR, onTranscription);
+    };
+  }, []);
   // Ref со всеми callback-ами для MessageCard (обновляется перед каждым рендером)
   const messageCardDataRef = useRef<MessageCardData>({} as MessageCardData);
 
@@ -595,6 +632,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   const currentChat = getCurrentChat();
   const messages = getCurrentMessages();
   const project = currentChat?.projectId ? getProjectById(currentChat.projectId) : null;
+
+  const dropdownPanelSx = getDropdownPanelSx(isDarkMode);
+  const dropdownItemSx = useMemo(() => getDropdownItemSx(isDarkMode), [isDarkMode]);
 
   // Сбрасываем поле ввода при переключении между чатами, чтобы черновик не "дублировался"
   useEffect(() => {
@@ -2482,30 +2522,63 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
             }
           />
         </Box>
-        {/* Выпадающее меню «Дополнительные действия» (режим нескольких моделей) */}
-        <Menu
-          anchorEl={anchorEl}
+        {/* Доп. действия (шестерёнка) — тот же стиль панели, что у селектора агента/модели и меню чата в проекте */}
+        <Popover
           open={Boolean(anchorEl)}
+          anchorEl={anchorEl}
           onClose={handleMenuClose}
           anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
           transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          PaperProps={{
-            sx: {
-              bgcolor: isDarkMode ? 'background.paper' : 'white',
-              border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-              boxShadow: isDarkMode ? '0 4px 20px rgba(0, 0, 0, 0.3)' : '0 4px 20px rgba(0, 0, 0, 0.15)',
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 0.5,
+                p: 0,
+                overflow: 'visible',
+                background: 'transparent !important',
+                backgroundColor: 'transparent !important',
+                boxShadow: 'none !important',
+                border: 'none',
+              },
             },
           }}
         >
-          <MenuItem onClick={() => { toggleKbRag(); handleMenuClose(); }} sx={{ gap: 1 }}>
-            <KbIcon fontSize="small" />
-            {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
-          </MenuItem>
-          <MenuItem onClick={handleClearChat} sx={{ gap: 1 }}>
-            <ClearIcon fontSize="small" />
-            Очистить чат
-          </MenuItem>
-        </Menu>
+          <Box sx={{ ...dropdownPanelSx, width: CHAT_GEAR_MENU_PANEL_WIDTH_PX, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ py: 0.5, px: 0.5 }}>
+              <Box
+                onClick={() => {
+                  toggleKbRag();
+                  handleMenuClose();
+                }}
+                sx={{
+                  ...dropdownItemSx,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  color: isDarkMode ? 'white' : '#333',
+                }}
+              >
+                <KbIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>
+                  {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
+                </Typography>
+              </Box>
+              <Box
+                onClick={handleClearChat}
+                sx={{
+                  ...dropdownItemSx,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  color: isDarkMode ? 'white' : '#333',
+                }}
+              >
+                <ClearIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>Очистить чат</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Popover>
       </Box>
     );
   }
@@ -2974,44 +3047,63 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
        />
        <DocumentDialog />
 
-               {/* Выпадающее меню с дополнительными действиями (шестеренка) */}
-       <Menu
-         anchorEl={anchorEl}
+       {/* Доп. действия (шестерёнка) — тот же стиль панели, что у селектора агента/модели и меню чата в проекте */}
+       <Popover
          open={Boolean(anchorEl)}
+         anchorEl={anchorEl}
          onClose={handleMenuClose}
-         anchorOrigin={{
-           vertical: 'top',
-           horizontal: 'left',
-         }}
-         transformOrigin={{
-           vertical: 'bottom',
-           horizontal: 'left',
-         }}
-         PaperProps={{
-           sx: {
-             bgcolor: isDarkMode ? 'background.paper' : 'white',
-             border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
-             boxShadow: isDarkMode 
-               ? '0 4px 20px rgba(0, 0, 0, 0.3)' 
-               : '0 4px 20px rgba(0, 0, 0, 0.15)',
-           }
+         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+         transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+         slotProps={{
+           paper: {
+             sx: {
+               mt: 0.5,
+               p: 0,
+               overflow: 'visible',
+               background: 'transparent !important',
+               backgroundColor: 'transparent !important',
+               boxShadow: 'none !important',
+               border: 'none',
+             },
+           },
          }}
        >
-         <MenuItem
-           onClick={() => {
-             toggleKbRag();
-             handleMenuClose();
-           }}
-           sx={{ gap: 1 }}
-         >
-           <KbIcon fontSize="small" />
-           {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
-         </MenuItem>
-         <MenuItem onClick={handleClearChat} sx={{ gap: 1 }}>
-           <ClearIcon fontSize="small" />
-           Очистить чат
-         </MenuItem>
-       </Menu>
+         <Box sx={{ ...dropdownPanelSx, width: CHAT_GEAR_MENU_PANEL_WIDTH_PX, display: 'flex', flexDirection: 'column' }}>
+           <Box sx={{ py: 0.5, px: 0.5 }}>
+             <Box
+               onClick={() => {
+                 toggleKbRag();
+                 handleMenuClose();
+               }}
+               sx={{
+                 ...dropdownItemSx,
+                 display: 'flex',
+                 alignItems: 'center',
+                 gap: 1,
+                 color: isDarkMode ? 'white' : '#333',
+               }}
+             >
+               <KbIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+               <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>
+                 {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
+               </Typography>
+             </Box>
+             <Box
+               onClick={handleClearChat}
+               sx={{
+                 ...dropdownItemSx,
+                 display: 'flex',
+                 alignItems: 'center',
+                 gap: 1,
+                 color: isDarkMode ? 'white' : '#333',
+               }}
+             >
+               <ClearIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+               <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>Очистить чат</Typography>
+             </Box>
+           </Box>
+         </Box>
+       </Popover>
 
        {/* Диалог редактирования сообщения */}
        <Dialog
@@ -3182,6 +3274,25 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                   }}
                 >
                   <AgentConstructorIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Презентации" placement="left">
+                <IconButton
+                  onClick={() => navigate('/presentation')}
+                  sx={{
+                    color: 'white',
+                    opacity: 1,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 1,
+                    '&:hover': {
+                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                      opacity: 1,
+                      '& .MuiSvgIcon-root': { color: 'primary.main' },
+                    },
+                  }}
+                >
+                  <PresentationIcon />
                 </IconButton>
               </Tooltip>
             </Box>
@@ -3427,6 +3538,25 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                     <AgentConstructorIcon fontSize="small" />
                   </ListItemIcon>
                   <ListItemText primary="Конструктор агента" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding sx={{ mb: 0.5 }}>
+                <ListItemButton
+                  onClick={() => navigate('/presentation')}
+                  sx={{
+                    borderRadius: 2,
+                    color: 'white',
+                    py: 0,
+                    px: 2,
+                    minHeight: 36,
+                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
+                    <PresentationIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Презентации" primaryTypographyProps={{ fontSize: '0.875rem' }} />
                 </ListItemButton>
               </ListItem>
             </List>

@@ -44,6 +44,11 @@ export interface Chat {
   isPinnedInProject?: boolean;
 }
 
+/** Чат показывается в блоке сайдбара «Все чаты», если уже есть переписка (сообщения пользователя и/или ассистента). */
+export function chatIsListedInAllChatsSection(chat: Chat): boolean {
+  return chat.messages.length > 0;
+}
+
 export interface ModelInfo {
   loaded: boolean;
   metadata?: {

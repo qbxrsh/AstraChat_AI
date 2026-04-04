@@ -19,8 +19,6 @@ import {
   Collapse,
   CircularProgress,
   Drawer,
-  Menu,
-  MenuItem,
   Popover,
   Dialog,
   DialogTitle,
@@ -81,19 +79,24 @@ import {
   ChevronRight as ChevronRightIcon,
   Menu as MenuIcon,
 } from '@mui/icons-material';
-import { useAppContext, useAppActions } from '../contexts/AppContext';
+import { useAppContext, useAppActions, chatIsListedInAllChatsSection } from '../contexts/AppContext';
 import { useSocket } from '../contexts/SocketContext';
 import VoiceChatDialog from '../components/VoiceChatDialog';
 import ChatInputBar from '../components/ChatInputBar';
 import { useTheme } from '@mui/material/styles';
 import AgentConstructorPanel from '../components/AgentConstructorPanel';
-import { MENU_BORDER_RADIUS_PX, getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
+import { getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, CHAT_GEAR_MENU_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
 import {
   isKnowledgeRagEnabled,
   setKnowledgeRagEnabled,
   KNOWLEDGE_RAG_STORAGE_EVENT,
 } from '../utils/knowledgeRagStorage';
+import {
+  ASTRA_TRIGGER_ATTACH,
+  ASTRA_OPEN_AGENT_CONSTRUCTOR,
+  ASTRA_OPEN_TRANSCRIPTION_SIDEBAR,
+} from '../constants/hotkeys';
 
 const projectIconMap: Record<string, React.ComponentType<any>> = {
   folder: FolderIcon,
@@ -139,6 +142,32 @@ export default function ProjectPage() {
   const [isSending, setIsSending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onAttach = () => fileInputRef.current?.click();
+    window.addEventListener(ASTRA_TRIGGER_ATTACH, onAttach);
+    return () => window.removeEventListener(ASTRA_TRIGGER_ATTACH, onAttach);
+  }, []);
+
+  useEffect(() => {
+    const onAgent = () => {
+      setRightSidebarHidden(false);
+      setRightSidebarOpen(true);
+      setAgentConstructorOpen(true);
+    };
+    const onTranscription = () => {
+      setRightSidebarHidden(false);
+      setRightSidebarOpen(true);
+      setTranscriptionModalOpen(true);
+    };
+    window.addEventListener(ASTRA_OPEN_AGENT_CONSTRUCTOR, onAgent);
+    window.addEventListener(ASTRA_OPEN_TRANSCRIPTION_SIDEBAR, onTranscription);
+    return () => {
+      window.removeEventListener(ASTRA_OPEN_AGENT_CONSTRUCTOR, onAgent);
+      window.removeEventListener(ASTRA_OPEN_TRANSCRIPTION_SIDEBAR, onTranscription);
+    };
+  }, []);
+
   const [chatMenuAnchor, setChatMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -215,7 +244,12 @@ export default function ProjectPage() {
   const projectChats = React.useMemo(() => {
     if (!project) return [];
     
-    const chats = state.chats.filter(chat => chat.projectId === projectId && !chat.isArchived);
+    const chats = state.chats.filter(
+      (chat) =>
+        chat.projectId === projectId &&
+        !chat.isArchived &&
+        chatIsListedInAllChatsSection(chat)
+    );
     
     // Сортируем: запиненные чаты сначала
     return chats.sort((a, b) => {
@@ -781,56 +815,66 @@ export default function ProjectPage() {
           </Box>
         )}
 
-        {/* Меню дополнительных действий (шестеренка) — всегда доступно */}
-        <Menu
-          anchorEl={anchorEl}
+        {/* Доп. действия (шестерёнка) — тот же стиль, что у меню чата в списке проекта */}
+        <Popover
           open={Boolean(anchorEl)}
+          anchorEl={anchorEl}
           onClose={handleMenuClose}
           anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
           transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          PaperProps={{
-            sx: {
-              bgcolor: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(10px)',
-              border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-              borderRadius: `${MENU_BORDER_RADIUS_PX}px`,
-              minWidth: 180,
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 0.5,
+                p: 0,
+                overflow: 'visible',
+                background: 'transparent !important',
+                backgroundColor: 'transparent !important',
+                boxShadow: 'none !important',
+                border: 'none',
+              },
             },
           }}
         >
-          <MenuItem
-            onClick={() => {
-              toggleKbRag();
-              handleMenuClose();
-            }}
-            sx={{
-              color: theme.palette.mode === 'dark' ? 'white' : '#333',
-              gap: 1,
-              '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-              },
-            }}
-          >
-            <KbIcon fontSize="small" />
-            <ListItemText primary={useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'} />
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setInputMessage('');
-              handleMenuClose();
-            }}
-            sx={{
-              color: theme.palette.mode === 'dark' ? 'white' : '#333',
-              gap: 1,
-              '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-              },
-            }}
-          >
-            <ClearIcon fontSize="small" />
-            <ListItemText primary="Очистить поле ввода" />
-          </MenuItem>
-        </Menu>
+          <Box sx={{ ...dropdownPanelSx, width: CHAT_GEAR_MENU_PANEL_WIDTH_PX, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ py: 0.5, px: 0.5 }}>
+              <Box
+                onClick={() => {
+                  toggleKbRag();
+                  handleMenuClose();
+                }}
+                sx={{
+                  ...dropdownItemSx,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  color: theme.palette.mode === 'dark' ? 'white' : '#333',
+                }}
+              >
+                <KbIcon sx={{ fontSize: 18, color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>
+                  {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
+                </Typography>
+              </Box>
+              <Box
+                onClick={() => {
+                  setInputMessage('');
+                  handleMenuClose();
+                }}
+                sx={{
+                  ...dropdownItemSx,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  color: theme.palette.mode === 'dark' ? 'white' : '#333',
+                }}
+              >
+                <ClearIcon sx={{ fontSize: 18, color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>Очистить поле ввода</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Popover>
 
         <VoiceChatDialog
           open={transcriptionModalOpen}

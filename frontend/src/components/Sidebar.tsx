@@ -15,6 +15,7 @@ import {
   Chip,
   Button,
   TextField,
+  InputAdornment,
   Popover,
   Dialog,
   DialogTitle,
@@ -71,15 +72,16 @@ import {
   HelpOutline as HelpOutlineIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import { useAppContext, useAppActions } from '../contexts/AppContext';
+import { useAppContext, useAppActions, chatIsListedInAllChatsSection } from '../contexts/AppContext';
+import { groupChatsBySidebarTime } from '../utils/chatListTimeGroups';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
-import SettingsModal from './SettingsModal';
 import ArchiveModal from './ArchiveModal';
 import NewProjectModal from './NewProjectModal';
 import EditProjectModal from './EditProjectModal';
 import { MENU_BORDER_RADIUS_PX, getMenuColors, SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX, SIDEBAR_PROJECT_AVATAR_SIZE, getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
+import { hotkeyLabel, ASTRA_REQUEST_DELETE_CURRENT_CHAT, ASTRA_OPEN_SETTINGS } from '../constants/hotkeys';
 
 interface SidebarProps {
   open: boolean;
@@ -87,6 +89,8 @@ interface SidebarProps {
   isDarkMode: boolean;
   onToggleTheme: () => void;
   onHide?: () => void;
+  /** Увеличивается при глобальном запросе фокуса на поле поиска (Ctrl+O). */
+  searchFocusNonce?: number;
 }
 
 const menuItems: any[] = [];
@@ -127,10 +131,12 @@ const projectIconMap: Record<string, React.ComponentType<any>> = {
   luggage: LuggageIcon,
 };
 
-export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onHide }: SidebarProps) {
+export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onHide, searchFocusNonce = 0 }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { state } = useAppContext();
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
   const { user, logout } = useAuth();
   const { 
     createChat, 
@@ -172,6 +178,8 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
   const userSubmenuCloseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showHelpDialog, setShowHelpDialog] = React.useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = React.useState(false);
+  const [newChatShortcutHover, setNewChatShortcutHover] = React.useState(false);
+  const [searchFieldHover, setSearchFieldHover] = React.useState(false);
   const [chatMenuAnchor, setChatMenuAnchor] = React.useState<null | HTMLElement>(null);
   const [chatMenuSubmenu, setChatMenuSubmenu] = React.useState<'folder' | 'project' | null>(null);
   const [chatMenuSubmenuOffsetTop, setChatMenuSubmenuOffsetTop] = React.useState(0);
@@ -179,7 +187,6 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
   const [selectedChatId, setSelectedChatId] = React.useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [chatsExpanded, setChatsExpanded] = React.useState(true);
-  const [showSettingsModal, setShowSettingsModal] = React.useState(false);
   const [showArchiveModal, setShowArchiveModal] = React.useState(false);
   const [showNewProjectModal, setShowNewProjectModal] = React.useState(false);
   const [pendingChatIdForProject, setPendingChatIdForProject] = React.useState<string | null>(null);
@@ -202,6 +209,28 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
   const [sidebarPanelBg, setSidebarPanelBg] = React.useState(() => getSidebarPanelBackground());
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const menuOpen = Boolean(anchorEl);
+
+  React.useEffect(() => {
+    if (searchFocusNonce === 0) return;
+    if (!open) {
+      onToggle();
+      const t = window.setTimeout(() => searchInputRef.current?.focus(), 320);
+      return () => clearTimeout(t);
+    }
+    searchInputRef.current?.focus();
+    return undefined;
+  }, [searchFocusNonce, open, onToggle]);
+
+  React.useEffect(() => {
+    const onRequestDelete = () => {
+      const id = stateRef.current.currentChatId;
+      if (!id) return;
+      setSelectedChatId(id);
+      setShowDeleteDialog(true);
+    };
+    window.addEventListener(ASTRA_REQUEST_DELETE_CURRENT_CHAT, onRequestDelete);
+    return () => window.removeEventListener(ASTRA_REQUEST_DELETE_CURRENT_CHAT, onRequestDelete);
+  }, []);
 
   React.useEffect(() => {
     const onColorChanged = () => setSidebarPanelBg(getSidebarPanelBackground());
@@ -245,6 +274,10 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
   };
 
   const handleCreateChat = () => {
+    const cur = getCurrentChat();
+    if (cur && !chatIsListedInAllChatsSection(cur)) {
+      deleteChat(cur.id);
+    }
     const chatId = createChat();
     setCurrentChat(chatId);
     navigate('/');
@@ -370,7 +403,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
     handleMenuClose();
     switch (action) {
       case 'settings':
-        setShowSettingsModal(true);
+        window.dispatchEvent(new CustomEvent(ASTRA_OPEN_SETTINGS));
         break;
       case 'archive':
         setShowArchiveModal(true);
@@ -478,13 +511,10 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
     if (selectedChatId) {
       deleteChat(selectedChatId);
       if (state.currentChatId === selectedChatId) {
-        // Если удаляем текущий чат, переключаемся на первый доступный
         const remainingChats = state.chats.filter(chat => chat.id !== selectedChatId);
-        if (remainingChats.length > 0) {
-          setCurrentChat(remainingChats[0].id);
-        } else {
-          setCurrentChat(null);
-        }
+        const next =
+          remainingChats.find((c) => chatIsListedInAllChatsSection(c)) ?? remainingChats[0] ?? null;
+        setCurrentChat(next ? next.id : null);
       }
       setShowDeleteDialog(false);
       setSelectedChatId(null);
@@ -496,8 +526,12 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
     // Исключаем чаты, которые уже находятся в папках или проектах (в зависимости от режима), и архивированные чаты
     const chatsInFolders = useFoldersMode ? new Set(folders.flatMap(folder => folder.chatIds)) : new Set();
     const chatsInProjects = !useFoldersMode ? new Set(state.chats.filter(chat => chat.projectId).map(chat => chat.id)) : new Set();
-    const availableChats = state.chats.filter(chat => 
-      !chatsInFolders.has(chat.id) && !chatsInProjects.has(chat.id) && !chat.isArchived
+    const availableChats = state.chats.filter(
+      (chat) =>
+        !chatsInFolders.has(chat.id) &&
+        !chatsInProjects.has(chat.id) &&
+        !chat.isArchived &&
+        chatIsListedInAllChatsSection(chat)
     );
     
     if (!searchQuery.trim()) {
@@ -510,10 +544,20 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
       )
     );
   }, [state.chats, searchQuery, folders, projects]);
+
+  const filteredChatsByTime = React.useMemo(
+    () => groupChatsBySidebarTime(filteredChats),
+    [filteredChats]
+  );
   
   // Функция для получения чатов проекта
   const getProjectChats = (projectId: string) => {
-    const chats = state.chats.filter(chat => chat.projectId === projectId && !chat.isArchived);
+    const chats = state.chats.filter(
+      (chat) =>
+        chat.projectId === projectId &&
+        !chat.isArchived &&
+        chatIsListedInAllChatsSection(chat)
+    );
     
     // Сортируем: запиненные чаты сначала
     return chats.sort((a, b) => {
@@ -769,7 +813,10 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               variant="contained"
               startIcon={<AddIcon />}
               onClick={handleCreateChat}
+              onMouseEnter={() => setNewChatShortcutHover(true)}
+              onMouseLeave={() => setNewChatShortcutHover(false)}
               sx={{
+                position: 'relative',
                 backgroundColor: 'rgba(255,255,255,0.1)',
                 color: 'white',
                 '&:hover': {
@@ -778,6 +825,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 textTransform: 'none',
                 fontWeight: 500,
                 py: 0,
+                pr: 1,
                 px: SIDEBAR_CONTROL_PX,
                 borderRadius: SIDEBAR_CONTROL_RADIUS,
                 justifyContent: 'flex-start',
@@ -786,11 +834,33 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               }}
             >
               Новый чат
+              <Typography
+                component="span"
+                sx={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '0.72rem',
+                  fontWeight: 500,
+                  color: 'rgba(144, 202, 249, 0.95)',
+                  opacity: newChatShortcutHover ? 1 : 0,
+                  transition: 'opacity 0.12s ease',
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {hotkeyLabel.newChat()}
+              </Typography>
             </Button>
           </Box>
 
           {/* Поиск в чатах */}
-          <Box sx={{ p: 1.5 }}>
+          <Box
+            sx={{ p: 1.5 }}
+            onMouseEnter={() => setSearchFieldHover(true)}
+            onMouseLeave={() => setSearchFieldHover(false)}
+          >
             <TextField
               inputRef={searchInputRef}
               fullWidth
@@ -800,17 +870,39 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               size="small"
               InputProps={{
                 startAdornment: <SearchIcon sx={{ color: 'rgba(255,255,255,0.7)', mr: 1, fontSize: '1rem' }} />,
-                endAdornment: useFoldersMode ? (
-                  <Tooltip title="Создать папку">
-                    <IconButton
-                      size="small"
-                      onClick={() => setShowCreateFolderDialog(true)}
-                      sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
-                    >
-                      <AddFolderIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                ) : null,
+                endAdornment: (
+                  <InputAdornment position="end" sx={{ maxHeight: 'none', mr: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Typography
+                        component="span"
+                        sx={{
+                          fontSize: '0.72rem',
+                          fontWeight: 500,
+                          color: 'rgba(144, 202, 249, 0.95)',
+                          opacity: searchFieldHover ? 1 : 0,
+                          maxWidth: searchFieldHover ? 120 : 0,
+                          overflow: 'hidden',
+                          transition: 'opacity 0.12s ease, max-width 0.15s ease',
+                          pointerEvents: 'none',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {hotkeyLabel.searchChats()}
+                      </Typography>
+                      {useFoldersMode ? (
+                        <Tooltip title="Создать папку">
+                          <IconButton
+                            size="small"
+                            onClick={() => setShowCreateFolderDialog(true)}
+                            sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                          >
+                            <AddFolderIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : null}
+                    </Box>
+                  </InputAdornment>
+                ),
                 sx: {
                   backgroundColor: 'rgba(255,255,255,0.1)',
                   borderRadius: SIDEBAR_CONTROL_RADIUS,
@@ -843,7 +935,19 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
             gap: 1,
           }}>
             {/* Кнопка поиска */}
-            <Tooltip title="Поиск в чатах" placement="right">
+            <Tooltip
+              placement="right"
+              title={
+                <Box>
+                  <Typography variant="body2" component="span" display="block">
+                    Поиск в чатах
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
+                    {hotkeyLabel.searchChats()}
+                  </Typography>
+                </Box>
+              }
+            >
               <IconButton
                 onClick={() => {
                   if (!open) {
@@ -877,7 +981,19 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
             </Tooltip>
 
             {/* Кнопка нового чата */}
-            <Tooltip title="Новый чат" placement="right">
+            <Tooltip
+              placement="right"
+              title={
+                <Box>
+                  <Typography variant="body2" component="span" display="block">
+                    Новый чат
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
+                    {hotkeyLabel.newChat()}
+                  </Typography>
+                </Box>
+              }
+            >
               <IconButton
                 onClick={handleCreateChat}
                 sx={{
@@ -1500,87 +1616,107 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 </Typography>
               ) : (
                 <List sx={{ py: 0 }}>
-                  {filteredChats.map((chat) => (
-                <ListItem key={chat.id} disablePadding sx={{ mb: 0.5 }}>
-                  <ListItemButton
-                    onClick={(e) => {
-                      // Не открываем чат, если идет редактирование
-                      if (editingChatId === chat.id) {
-                        e.stopPropagation();
-                        return;
-                      }
-                      handleSelectChat(chat.id);
-                    }}
-                    sx={{
-                      borderRadius: 2,
-                      backgroundColor: state.currentChatId === chat.id ? 'rgba(255,255,255,0.15)' : 'transparent',
-                      '&:hover': {
-                        backgroundColor: state.currentChatId === chat.id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
-                      },
-                      transition: 'all 0.2s ease',
-                      py: 0,
-                      minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
-                      px: SIDEBAR_CONTROL_PX,
-                    }}
-                  >
-                    <ListItemText
-                      primary={
-                        editingChatId === chat.id ? (
-                          <TextField
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            onBlur={handleSaveEdit}
-                            onKeyDown={handleKeyPress}
-                            onClick={(e) => e.stopPropagation()}
-                            autoFocus
-                            size="small"
-                            fullWidth
-                            sx={{
-                              '& .MuiInputBase-input': {
-                                color: 'white',
-                                fontSize: '0.875rem',
-                                py: 0.5,
-                              },
-                              '& .MuiOutlinedInput-notchedOutline': {
-                                borderColor: 'rgba(255,255,255,0.3)',
-                              },
-                              '&:hover .MuiOutlinedInput-notchedOutline': {
-                                borderColor: 'rgba(255,255,255,0.5)',
-                              },
-                              '& .MuiOutlinedInput-root': {
-                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: 'rgba(255,255,255,0.7)',
-                                },
-                              },
+                  {filteredChatsByTime.map((section, sectionIdx) => (
+                    <React.Fragment key={section.key}>
+                      <Typography
+                        component="div"
+                        variant="caption"
+                        sx={{
+                          px: 2,
+                          pt: sectionIdx === 0 ? 0.25 : 1.25,
+                          pb: 0.5,
+                          opacity: 0.65,
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          letterSpacing: '0.02em',
+                          color: 'rgba(255,255,255,0.85)',
+                        }}
+                      >
+                        {section.label}
+                      </Typography>
+                      {section.chats.map((chat) => (
+                        <ListItem key={chat.id} disablePadding sx={{ mb: 0.5 }}>
+                          <ListItemButton
+                            onClick={(e) => {
+                              if (editingChatId === chat.id) {
+                                e.stopPropagation();
+                                return;
+                              }
+                              handleSelectChat(chat.id);
                             }}
-                          />
-                        ) : (
-                          <Typography
-                            variant="body2"
                             sx={{
-                              fontWeight: state.currentChatId === chat.id ? 600 : 400,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              fontSize: '0.8rem',
+                              borderRadius: 2,
+                              backgroundColor: state.currentChatId === chat.id ? 'rgba(255,255,255,0.15)' : 'transparent',
+                              '&:hover': {
+                                backgroundColor: state.currentChatId === chat.id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                              },
+                              transition: 'all 0.2s ease',
+                              py: 0,
+                              minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+                              px: SIDEBAR_CONTROL_PX,
                             }}
                           >
-                            {chat.title}
-                          </Typography>
-                        )
-                      }
-                    />
-                    {!editingChatId && (
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleChatMenuClick(e, chat.id)}
-                        sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
-                      >
-                        <MoreVertIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </ListItemButton>
-                </ListItem>
+                            <ListItemText
+                              primary={
+                                editingChatId === chat.id ? (
+                                  <TextField
+                                    value={editingTitle}
+                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                    onBlur={handleSaveEdit}
+                                    onKeyDown={handleKeyPress}
+                                    onClick={(e) => e.stopPropagation()}
+                                    autoFocus
+                                    size="small"
+                                    fullWidth
+                                    sx={{
+                                      '& .MuiInputBase-input': {
+                                        color: 'white',
+                                        fontSize: '0.875rem',
+                                        py: 0.5,
+                                      },
+                                      '& .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: 'rgba(255,255,255,0.3)',
+                                      },
+                                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: 'rgba(255,255,255,0.5)',
+                                      },
+                                      '& .MuiOutlinedInput-root': {
+                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                          borderColor: 'rgba(255,255,255,0.7)',
+                                        },
+                                      },
+                                    }}
+                                  />
+                                ) : (
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      fontWeight: state.currentChatId === chat.id ? 600 : 400,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      fontSize: '0.8rem',
+                                    }}
+                                  >
+                                    {chat.title}
+                                  </Typography>
+                                )
+                              }
+                            />
+                            {!editingChatId && (
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleChatMenuClick(e, chat.id)}
+                                sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                              >
+                                <MoreVertIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                          </ListItemButton>
+                        </ListItem>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </List>
               )}
@@ -2081,8 +2217,46 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
           </IconButton>
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ color: isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)' }}>
-            Список горячих клавиш приложения. Раздел в разработке.
+          <List dense sx={{ py: 0 }}>
+            {(
+              [
+                { primary: 'Новый чат', keys: hotkeyLabel.newChat() },
+                { primary: 'Поиск по чатам', keys: hotkeyLabel.searchChats() },
+                { primary: 'Прикрепить файлы', keys: hotkeyLabel.attachFiles() },
+                { primary: 'Удалить текущий чат', keys: hotkeyLabel.deleteChat() },
+                { primary: 'Окно настроек', keys: hotkeyLabel.openSettings() },
+                { primary: 'Конструктор агента (правая панель)', keys: hotkeyLabel.openAgentConstructor() },
+                { primary: 'Транскрибатор (правая панель)', keys: hotkeyLabel.openTranscription() },
+              ] as const
+            ).map((row) => (
+              <ListItem
+                key={row.primary}
+                sx={{ px: 0, py: 1 }}
+                secondaryAction={
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'primary.light',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {row.keys}
+                  </Typography>
+                }
+              >
+                <ListItemText
+                  primary={row.primary}
+                  primaryTypographyProps={{
+                    sx: { color: isDarkMode ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.87)' },
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
+            На Mac вместо Ctrl — ⌘ (Command); Alt — клавиша Option (⌥). Удаление чата — с подтверждением. На странице
+            проекта Alt+T открывает диалог транскрибации, как кнопка в правой панели.
           </Typography>
         </DialogContent>
       </Dialog>
@@ -2702,14 +2876,6 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Модальное окно настроек */}
-      <SettingsModal
-        open={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        isDarkMode={isDarkMode}
-        onToggleTheme={onToggleTheme}
-      />
 
       {/* Модальное окно архива */}
       <ArchiveModal

@@ -4,6 +4,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box, IconButton, Tooltip } from '@mui/material';
 import { ChevronRight as ChevronRightIcon } from '@mui/icons-material';
 import Sidebar from './components/Sidebar';
+import GlobalKeyboardShortcuts from './components/GlobalKeyboardShortcuts';
+import SettingsModal from './components/SettingsModal';
+import { ASTRA_FOCUS_CHAT_SEARCH, ASTRA_OPEN_SETTINGS } from './constants/hotkeys';
 import UnifiedChatPage from './pages/UnifiedChatPage';
 import VoicePage from './pages/VoicePage';
 import DocumentsPage from './pages/DocumentsPage';
@@ -136,6 +139,27 @@ function App() {
     return saved !== null ? saved === 'true' : false;
   });
 
+  /** Счётчик для фокуса поля «Поиск в чатах» (в т.ч. после показа скрытого сайдбара). */
+  const [searchFocusNonce, setSearchFocusNonce] = useState(0);
+  /** Настройки по Alt+S — в App, чтобы работало даже при скрытой левой панели. */
+  const [settingsFromHotkeyOpen, setSettingsFromHotkeyOpen] = useState(false);
+
+  useEffect(() => {
+    const onOpenSettings = () => setSettingsFromHotkeyOpen(true);
+    window.addEventListener(ASTRA_OPEN_SETTINGS, onOpenSettings);
+    return () => window.removeEventListener(ASTRA_OPEN_SETTINGS, onOpenSettings);
+  }, []);
+
+  useEffect(() => {
+    const onFocusSearch = () => {
+      setSidebarHidden(false);
+      setSidebarOpen(true);
+      setSearchFocusNonce((n) => n + 1);
+    };
+    window.addEventListener(ASTRA_FOCUS_CHAT_SEARCH, onFocusSearch);
+    return () => window.removeEventListener(ASTRA_FOCUS_CHAT_SEARCH, onFocusSearch);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('gazikii-dark-mode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
@@ -199,8 +223,16 @@ function App() {
                             isDarkMode={isDarkMode}
                             onToggleTheme={toggleTheme}
                             onHide={() => setSidebarHidden(true)}
+                            searchFocusNonce={searchFocusNonce}
                           />
                         )}
+                        <GlobalKeyboardShortcuts />
+                        <SettingsModal
+                          open={settingsFromHotkeyOpen}
+                          onClose={() => setSettingsFromHotkeyOpen(false)}
+                          isDarkMode={isDarkMode}
+                          onToggleTheme={toggleTheme}
+                        />
                         <Box 
                           component="main" 
                           sx={{ 
