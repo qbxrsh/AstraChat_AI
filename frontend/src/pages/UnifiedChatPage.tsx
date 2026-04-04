@@ -2619,6 +2619,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
         className="fullscreen-chat" 
         sx={{ 
           flexGrow: 1,
+          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -2727,12 +2728,22 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
            bgcolor: isDragging ? 'action.hover' : 'transparent',
            position: 'relative',
            zIndex: workZoneAnimated ? 1 : undefined,
-           minHeight: '60vh',
+           ...(messages.length === 0
+             ? {
+                 flex: '0 0 auto',
+                 minHeight: 0,
+                 height: 0,
+                 overflow: 'hidden',
+                 p: 0,
+               }
+             : {
+                 minHeight: '60vh',
+                 justifyContent: 'flex-start',
+                 py: 4,
+               }),
            display: 'flex',
            flexDirection: 'column',
-           justifyContent: messages.length === 0 ? 'center' : 'flex-start',
            alignItems: 'center',
-           py: 4,
            // Селектор моделей в правом верхнем углу
            '&::before': {
              content: '""',
@@ -2981,40 +2992,109 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
               zIndex: workZoneAnimated ? 2 : undefined,
               borderColor: isDragging ? 'primary.main' : 'divider',
               bgcolor: isDragging ? 'action.hover' : 'transparent',
+              ...(messages.length === 0 && {
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }),
             }}
            onDragOver={handleDragOver}
            onDragLeave={handleDragLeave}
            onDrop={handleDrop}
          >
           
-                     {/* Приветствие НАД контейнером ввода при пустом чате */}
-                     {messages.length === 0 && (
-                       <Box sx={{ 
-                         textAlign: 'center', 
-                         mb: 3,
-                         maxWidth: interfaceSettings.widescreenMode ? '100%' : '1000px',
-                         mx: 'auto',
-                         px: interfaceSettings.widescreenMode ? 4 : 2,
-                         position: 'absolute',
-                         top: '45%',
-                         left: '50%',
-                         transform: 'translate(-50%, -120%)',
-                         width: '100%',
-                       }}>
-                         <Typography 
-                           variant="h4" 
-                           sx={{ 
-                             color: isDarkMode ? 'white' : '#333', 
-                             fontWeight: 600,
-                             mb: 1,
+                     {messages.length === 0 ? (
+                       <Box
+                         sx={{
+                           flex: 1,
+                           minHeight: 0,
+                           width: '100%',
+                           display: 'flex',
+                           flexDirection: 'column',
+                           justifyContent: 'center',
+                           alignItems: 'center',
+                           boxSizing: 'border-box',
+                           /* верхний отступ рабочей зоны (pt у fullscreen-chat) смещает математический центр вниз — чуть поднимаем блок */
+                           transform: 'translateY(calc(-1 * clamp(20px, 4vh, 72px)))',
+                         }}
+                       >
+                         <Box
+                           sx={{
+                             textAlign: 'center',
+                             mb: 2,
+                             maxWidth: interfaceSettings.widescreenMode ? '100%' : '1000px',
+                             mx: 'auto',
+                             px: interfaceSettings.widescreenMode ? 4 : 2,
+                             width: '100%',
                            }}
                          >
-                           {getGreeting()}
-                         </Typography>
+                           <Typography
+                             variant="h4"
+                             sx={{
+                               color: isDarkMode ? 'white' : '#333',
+                               fontWeight: 600,
+                               mb: 1,
+                             }}
+                           >
+                             {getGreeting()}
+                           </Typography>
+                         </Box>
+                         <ChatInputBar
+                           value={inputMessage}
+                           onChange={setInputMessage}
+                           onKeyPress={handleKeyPress}
+                           onPaste={(e) => handlePaste(e as React.ClipboardEvent<HTMLDivElement>)}
+                           placeholder={
+                             !isConnected && !isConnecting
+                               ? 'Нет соединения с сервером. Запустите backend на порту 8000'
+                               : isConnecting
+                                 ? 'Подключение к серверу...'
+                                 : state.isLoading && !messages.some(msg => msg.isStreaming)
+                                   ? 'astrachat думает...'
+                                   : state.isLoading && messages.some(msg => msg.isStreaming)
+                                     ? 'astrachat генерирует ответ... Нажмите ⏹️ чтобы остановить'
+                                     : 'Чем я могу помочь вам сегодня?'
+                           }
+                           inputDisabled={!isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           inputRef={inputRef}
+                           isDarkMode={isDarkMode}
+                           solidWorkZoneBackground={workZoneAnimated}
+                           styleVariant={interfaceSettings.chatInputStyle}
+                           containerSx={{
+                             mt: 0,
+                             p: interfaceSettings.chatInputStyle === 'classic' ? 0 : 1.5,
+                             borderRadius: interfaceSettings.chatInputStyle === 'classic' ? '28px' : '28px',
+                             maxWidth: interfaceSettings.widescreenMode ? '100%' : '800px',
+                             width: '100%',
+                             mx: 'auto',
+                             px: interfaceSettings.chatInputStyle === 'classic' ? 0 : (interfaceSettings.widescreenMode ? 4 : 2),
+                           }}
+                           fileInputRef={fileInputRef}
+                           onAttachClick={() => fileInputRef.current?.click()}
+                           onFileSelect={(files) => { if (files?.length) handleFileUpload(files[0]); }}
+                           uploadedFiles={uploadedFiles.map(f => ({ name: f.name, type: f.type || 'application/octet-stream' }))}
+                           onFileRemove={(file) => handleFileDelete(file.name)}
+                           isUploading={isUploading}
+                           attachDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           showReportButton={uploadedFiles.length > 0}
+                           onReportClick={handleGenerateReport}
+                           reportDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           onSettingsClick={handleMenuOpen}
+                           settingsDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
+                           showStopButton={state.isLoading || messages.some(msg => msg.isStreaming)}
+                           onStopClick={handleStopGeneration}
+                           onSendClick={handleSendMessage}
+                           sendDisabled={!inputMessage.trim() || !isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           onVoiceClick={() => setShowVoiceDialog(true)}
+                           voiceDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
+                           voiceTooltip="Голосовой ввод"
+                         />
                        </Box>
-                     )}
+                     ) : null}
 
-                     {/* Объединенное поле ввода с кнопками */}
+                     {/* Объединенное поле ввода с кнопками (есть сообщения) */}
+           {messages.length > 0 ? (
            <ChatInputBar
              value={inputMessage}
              onChange={setInputMessage}
@@ -3040,17 +3120,10 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                mt: 2,
                p: interfaceSettings.chatInputStyle === 'classic' ? 0 : 1.5,
                borderRadius: interfaceSettings.chatInputStyle === 'classic' ? '28px' : '28px',
-               maxWidth: messages.length === 0 ? '800px' : (interfaceSettings.widescreenMode ? '100%' : '1000px'),
+               maxWidth: interfaceSettings.widescreenMode ? '100%' : '1000px',
                width: '100%',
                mx: 'auto',
                px: interfaceSettings.chatInputStyle === 'classic' ? 0 : (interfaceSettings.widescreenMode ? 4 : 2),
-               ...(messages.length === 0 && {
-                 position: 'absolute',
-                 top: '50%',
-                 left: '50%',
-                 transform: 'translate(-50%, 0)',
-                 mt: 0,
-               }),
              }}
              fileInputRef={fileInputRef}
              onAttachClick={() => fileInputRef.current?.click()}
@@ -3072,6 +3145,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
              voiceDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
             voiceTooltip="Голосовой ввод"
           />
+           ) : null}
 
              {/* Диалоги */}
        <VoiceChatDialog

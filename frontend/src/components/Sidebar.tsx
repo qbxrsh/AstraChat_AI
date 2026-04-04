@@ -936,6 +936,41 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
             alignItems: 'center',
             gap: 1,
           }}>
+            {/* Кнопка нового чата — первая, как в раскрытом режиме */}
+            <Tooltip
+              placement="right"
+              title={
+                <Box>
+                  <Typography variant="body2" component="span" display="block">
+                    Новый чат
+                  </Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
+                    {hotkeyLabel.newChat()}
+                  </Typography>
+                </Box>
+              }
+            >
+              <IconButton
+                onClick={handleCreateChat}
+                sx={{
+                  color: 'white',
+                  opacity: 1,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 1,
+                  '&:hover': {
+                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                    opacity: 1,
+                    '& .MuiSvgIcon-root': {
+                      color: 'primary.main',
+                    },
+                  },
+                }}
+              >
+                <AddIcon />
+              </IconButton>
+            </Tooltip>
+
             {/* Кнопка поиска */}
             <Tooltip
               placement="right"
@@ -979,41 +1014,6 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 }}
               >
                 <SearchIcon />
-              </IconButton>
-            </Tooltip>
-
-            {/* Кнопка нового чата */}
-            <Tooltip
-              placement="right"
-              title={
-                <Box>
-                  <Typography variant="body2" component="span" display="block">
-                    Новый чат
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
-                    {hotkeyLabel.newChat()}
-                  </Typography>
-                </Box>
-              }
-            >
-              <IconButton
-                onClick={handleCreateChat}
-                sx={{
-                  color: 'white',
-                  opacity: 1,
-                  width: 40,
-                  height: 40,
-                  borderRadius: 1,
-                  '&:hover': {
-                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                    opacity: 1,
-                    '& .MuiSvgIcon-root': {
-                      color: 'primary.main',
-                    },
-                  },
-                }}
-              >
-                <AddIcon />
               </IconButton>
             </Tooltip>
 
