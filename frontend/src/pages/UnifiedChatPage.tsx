@@ -77,6 +77,10 @@ import VoiceChatDialog from '../components/VoiceChatDialog';
 import AgentConstructorPanel from '../components/AgentConstructorPanel';
 import AgentSelector from '../components/AgentSelector';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
+import { getWorkZoneBackgroundColor, isWorkZoneAnimatedMode } from '../constants/workZoneBackground';
+import { useWorkZoneBgMode } from '../hooks/useWorkZoneBgMode';
+import WorkZoneStarrySky from '../components/WorkZoneStarrySky';
+import WorkZoneSnowfall from '../components/WorkZoneSnowfall';
 import {
   isKnowledgeRagEnabled,
   setKnowledgeRagEnabled,
@@ -473,6 +477,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   });
   const [rightSidebarPanelBg, setRightSidebarPanelBg] = useState(() => getSidebarPanelBackground());
   const [agentConstructorOpen, setAgentConstructorOpen] = useState(false);
+  const workZoneMode = useWorkZoneBgMode();
+  const workZoneAnimated = isWorkZoneAnimatedMode(workZoneMode);
+  const workZoneBgColor = getWorkZoneBackgroundColor(isDarkMode, workZoneMode);
 
   useEffect(() => {
     const onColorChanged = () => setRightSidebarPanelBg(getSidebarPanelBackground());
@@ -2218,9 +2225,30 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     const multiLlmWaitingUi = state.isLoading || anyMultiWindowStreaming;
 
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          position: 'relative',
+          backgroundColor: workZoneBgColor,
+        }}
+      >
+        {workZoneMode === 'starry' ? <WorkZoneStarrySky isDarkMode={isDarkMode} /> : null}
+        {workZoneMode === 'snowfall' ? <WorkZoneSnowfall isDarkMode={isDarkMode} /> : null}
         {/* Основная область с окнами моделей */}
-        <Box sx={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${modelWindows.length}, 1fr)`, gap: 2, p: 2, overflow: 'hidden' }}>
+        <Box
+          sx={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: `repeat(${modelWindows.length}, 1fr)`,
+            gap: 2,
+            p: 2,
+            overflow: 'hidden',
+            position: 'relative',
+            zIndex: 1,
+          }}
+        >
           {modelWindows.map((window) => {
             const isStreaming = modelWindows.find(w => w.id === window.id)?.isStreaming || false;
             
@@ -2457,7 +2485,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
         </Box>
 
         {/* Панель управления моделями и ввода */}
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
           <ChatInputBar
             value={inputMessage}
             onChange={setInputMessage}
@@ -2477,6 +2505,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
             inputDisabled={!isConnected || !modelWindows.some(w => w.selectedModel) || modelWindows.some(w => w.isStreaming)}
             inputRef={inputRef}
             isDarkMode={isDarkMode}
+            solidWorkZoneBackground={workZoneAnimated}
             maxWidth="1000px"
             fileInputRef={fileInputRef}
             onAttachClick={() => fileInputRef.current?.click()}
@@ -2596,13 +2625,13 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
           marginRight: rightSidebarHidden ? 0 : (rightSidebarOpen ? 0 : '-64px'),
           transition: 'margin-right 0.3s ease',
           pt: 8,
-          background: isDarkMode 
-            ? 'linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 50%, #1a1a1a 100%)'
-            : 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 50%, #fafafa 100%)',
+          backgroundColor: workZoneBgColor,
           color: isDarkMode ? 'white' : '#333',
           position: 'relative',
         }}
       >
+      {workZoneMode === 'starry' ? <WorkZoneStarrySky isDarkMode={isDarkMode} /> : null}
+      {workZoneMode === 'snowfall' ? <WorkZoneSnowfall isDarkMode={isDarkMode} /> : null}
       {/* Заголовок с информацией о проекте и модели */}
       {currentChat && project && (
         <Box sx={{ 
@@ -2697,6 +2726,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
            borderColor: isDragging ? 'primary.main' : 'transparent',
            bgcolor: isDragging ? 'action.hover' : 'transparent',
            position: 'relative',
+           zIndex: workZoneAnimated ? 1 : undefined,
            minHeight: '60vh',
            display: 'flex',
            flexDirection: 'column',
@@ -2947,6 +2977,8 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
            className="chat-input-area"
            data-theme={isDarkMode ? 'dark' : 'light'}
                        sx={{
+              position: 'relative',
+              zIndex: workZoneAnimated ? 2 : undefined,
               borderColor: isDragging ? 'primary.main' : 'divider',
               bgcolor: isDragging ? 'action.hover' : 'transparent',
             }}
@@ -3002,6 +3034,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
              inputDisabled={!isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
              inputRef={inputRef}
              isDarkMode={isDarkMode}
+             solidWorkZoneBackground={workZoneAnimated}
              styleVariant={interfaceSettings.chatInputStyle}
              containerSx={{
                mt: 2,

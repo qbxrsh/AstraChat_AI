@@ -249,7 +249,7 @@ export default function RAGSettings({}: RAGSettingsProps) {
         <CardContent>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SearchIcon color="primary" />
-            Стратегия поиска RAG
+            Настройки для RAG
             <Tooltip 
               title="RAG (Retrieval-Augmented Generation) - система поиска релевантных документов для улучшения ответов модели. Выберите стратегию поиска, которая лучше всего подходит для ваших задач." 
               arrow

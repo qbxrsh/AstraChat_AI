@@ -441,7 +441,7 @@ export default function AgentsSettings() {
         <CardContent>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <AgentIcon color="primary" />
-            Статус агентной архитектуры
+            Настройки взаимодействия с AstraChat
           </Typography>
 
           {isLoading && (

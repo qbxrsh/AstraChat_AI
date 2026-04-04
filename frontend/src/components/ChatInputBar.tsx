@@ -8,6 +8,12 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
+  CHAT_INPUT_BORDER_DARK,
+  CHAT_INPUT_BORDER_LIGHT,
+  CHAT_INPUT_SURFACE_DARK,
+  CHAT_INPUT_SURFACE_LIGHT,
+} from '../constants/workZoneBackground';
+import {
   Add as AddIcon,
   Send as SendIcon,
   Settings as SettingsIcon,
@@ -70,6 +76,9 @@ export interface ChatInputBarProps {
   /** 'compact' — текущий пилюльный стиль (по умолчанию);
    *  'classic' — прямоугольник с тулбаром кнопок снизу */
   styleVariant?: 'compact' | 'classic';
+
+  /** Как на стандартном фоне рабочей зоны (#2b2b2b / #fafafa), чтобы не терялось на чёрном «звёздном» фоне */
+  solidWorkZoneBackground?: boolean;
 }
 
 const iconButtonSx = (isDark: boolean, isClassic: boolean) => ({
@@ -115,6 +124,7 @@ export default function ChatInputBar({
   voiceTooltip = 'Голосовой ввод',
   extraActions,
   styleVariant = 'compact',
+  solidWorkZoneBackground = false,
 }: ChatInputBarProps) {
   const getFileIcon = (file: UploadedFile) => {
     if (file.type?.includes('pdf')) return <PdfIcon fontSize="small" />;
@@ -123,6 +133,43 @@ export default function ChatInputBar({
   };
 
   const isClassic = styleVariant === 'classic';
+
+  const shellBg = solidWorkZoneBackground
+    ? isDarkMode
+      ? CHAT_INPUT_SURFACE_DARK
+      : CHAT_INPUT_SURFACE_LIGHT
+    : isDarkMode
+      ? 'rgba(255, 255, 255, 0.05)'
+      : 'rgba(0, 0, 0, 0.05)';
+
+  const shellBorder = solidWorkZoneBackground
+    ? isDarkMode
+      ? isClassic
+        ? 'rgba(255, 255, 255, 0.12)'
+        : CHAT_INPUT_BORDER_DARK
+      : isClassic
+        ? 'rgba(0, 0, 0, 0.12)'
+        : CHAT_INPUT_BORDER_LIGHT
+    : isClassic
+      ? isDarkMode
+        ? 'rgba(255, 255, 255, 0.12)'
+        : 'rgba(0, 0, 0, 0.12)'
+      : isDarkMode
+        ? 'rgba(255, 255, 255, 0.1)'
+        : 'rgba(0, 0, 0, 0.1)';
+
+  const shellChrome = solidWorkZoneBackground
+    ? {
+        bgcolor: shellBg,
+        backgroundColor: shellBg,
+        border: `1px solid ${shellBorder}`,
+        boxShadow: isDarkMode
+          ? '0 2px 16px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)'
+          : '0 2px 12px rgba(0,0,0,0.08)',
+        position: 'relative' as const,
+        zIndex: 1,
+      }
+    : {};
 
   // В компактном режиме: одна строка — кнопки по бокам; со 2-й строки — кнопки снизу.
   // Переключение по числу символов + гистерезис, чтобы не скакало (scrollHeight давал дребезг).
@@ -372,10 +419,11 @@ export default function ChatInputBar({
           width: '100%',
           maxWidth,
           borderRadius: '28px',
-          bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
-          border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)'}`,
           overflow: 'hidden',
           ...containerSx,
+          bgcolor: shellBg,
+          border: `1px solid ${shellBorder}`,
+          ...shellChrome,
         }}
       >
         {fileInput}
@@ -469,9 +517,10 @@ export default function ChatInputBar({
         p: 1.5,
         px: 2,
         borderRadius: '28px',
-        bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-        border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`,
         ...containerSx,
+        bgcolor: shellBg,
+        border: `1px solid ${shellBorder}`,
+        ...shellChrome,
       }}
     >
       {fileInput}

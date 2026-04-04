@@ -841,13 +841,14 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   right: 10,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  fontSize: '0.72rem',
-                  fontWeight: 500,
-                  color: 'rgba(144, 202, 249, 0.95)',
-                  opacity: newChatShortcutHover ? 1 : 0,
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.85)',
+                  opacity: newChatShortcutHover ? 0.65 : 0,
                   transition: 'opacity 0.12s ease',
                   pointerEvents: 'none',
                   whiteSpace: 'nowrap',
+                  letterSpacing: '0.02em',
                 }}
               >
                 {hotkeyLabel.newChat()}
@@ -876,15 +877,16 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                       <Typography
                         component="span"
                         sx={{
-                          fontSize: '0.72rem',
-                          fontWeight: 500,
-                          color: 'rgba(144, 202, 249, 0.95)',
-                          opacity: searchFieldHover ? 1 : 0,
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          color: 'rgba(255,255,255,0.85)',
+                          opacity: searchFieldHover ? 0.65 : 0,
                           maxWidth: searchFieldHover ? 120 : 0,
                           overflow: 'hidden',
                           transition: 'opacity 0.12s ease, max-width 0.15s ease',
                           pointerEvents: 'none',
                           whiteSpace: 'nowrap',
+                          letterSpacing: '0.02em',
                         }}
                       >
                         {hotkeyLabel.searchChats()}
@@ -2255,8 +2257,8 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
             ))}
           </List>
           <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
-            На Mac вместо Ctrl — ⌘ (Command); Alt — клавиша Option (⌥). Удаление чата — с подтверждением. На странице
-            проекта Alt+T открывает диалог транскрибации, как кнопка в правой панели.
+            На Mac вместо Ctrl — ⌘ (Command); Alt — клавиша Option (⌥). Удаление чата — с подтверждением. Все сочетания
+            рассчитаны на английскую раскладку: сначала переключитесь на English, затем нажимайте горячие клавиши.
           </Typography>
         </DialogContent>
       </Dialog>

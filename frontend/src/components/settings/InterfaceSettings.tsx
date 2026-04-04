@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import {
   Box,
@@ -33,6 +33,11 @@ import {
 } from '../../constants/menuStyles';
 import { useAppActions } from '../../contexts/AppContext';
 import { SIDEBAR_PANEL_COLOR_KEY, DEFAULT_SIDEBAR_GRADIENT } from '../../constants/sidebarPanelColor';
+import {
+  WORK_ZONE_BG_MODE_KEY,
+  getWorkZoneBgMode,
+  type WorkZoneBgMode,
+} from '../../constants/workZoneBackground';
 import {
   isNotificationSupported,
   requestNotificationPermission,
@@ -97,7 +102,17 @@ export default function InterfaceSettings() {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [stylePopoverAnchor, setStylePopoverAnchor] = useState<HTMLElement | null>(null);
   const [colorPopoverAnchor, setColorPopoverAnchor] = useState<HTMLElement | null>(null);
+  const [workZoneBgPopoverAnchor, setWorkZoneBgPopoverAnchor] = useState<HTMLElement | null>(null);
   const [modelModePopoverAnchor, setModelModePopoverAnchor] = useState<HTMLElement | null>(null);
+
+  const [workZoneBgMode, setWorkZoneBgMode] = useState<WorkZoneBgMode>(() => getWorkZoneBgMode());
+
+  useEffect(() => {
+    const sync = () => setWorkZoneBgMode(getWorkZoneBgMode());
+    sync();
+    window.addEventListener('interfaceSettingsChanged', sync);
+    return () => window.removeEventListener('interfaceSettingsChanged', sync);
+  }, []);
 
   type ModelSelectorMode = 'settings' | 'workspace' | 'workspace_agent';
   const [modelSelectorMode, setModelSelectorModeState] = useState<ModelSelectorMode>(() => {
@@ -153,6 +168,21 @@ export default function InterfaceSettings() {
     localStorage.setItem('chat_input_style', value);
     window.dispatchEvent(new Event('interfaceSettingsChanged'));
     showNotification('success', 'Стиль поля ввода изменён');
+  };
+
+  const handleWorkZoneBgMode = (mode: WorkZoneBgMode) => {
+    setWorkZoneBgMode(mode);
+    localStorage.setItem(WORK_ZONE_BG_MODE_KEY, mode);
+    window.dispatchEvent(new Event('interfaceSettingsChanged'));
+    showNotification(
+      'success',
+      mode === 'starry'
+        ? 'Включён фон «Звёздное небо» в рабочей зоне'
+        : mode === 'snowfall'
+          ? 'Включён фон «Снегопад» в рабочей зоне'
+          : 'Фон рабочей зоны: по умолчанию',
+    );
+    setWorkZoneBgPopoverAnchor(null);
   };
 
   const handleInterfaceSettingChange = async (key: keyof typeof interfaceSettings, value: boolean) => {
@@ -639,6 +669,86 @@ export default function InterfaceSettings() {
                 checked={interfaceSettings.showDialoguesPanel}
                 onChange={(e) => handleInterfaceSettingChange('showDialoguesPanel', e.target.checked)}
               />
+            </ListItem>
+
+            <Divider />
+
+            {/* Фон рабочей зоны (чат, проект) */}
+            <ListItem
+              sx={{
+                px: 0,
+                py: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 2,
+              }}
+            >
+              <ListItemText
+                primary="Фон рабочей зоны"
+                primaryTypographyProps={{ variant: 'body1', fontWeight: 500 }}
+                secondary="Область чата и страницы проекта (боковые панели без изменений)"
+                secondaryTypographyProps={{ variant: 'body2', sx: { mt: 0.5 } }}
+              />
+              <Box sx={{ minWidth: 200, flexShrink: 0 }}>
+                <Box onClick={(e) => setWorkZoneBgPopoverAnchor(e.currentTarget)} sx={DROPDOWN_TRIGGER_BUTTON_SX}>
+                  <Typography sx={{ color: 'white', fontWeight: 500, fontSize: '0.875rem' }}>
+                    {workZoneBgMode === 'starry'
+                      ? 'Звёздное небо'
+                      : workZoneBgMode === 'snowfall'
+                        ? 'Снегопад'
+                        : 'По умолчанию'}
+                  </Typography>
+                  <ExpandMoreIcon
+                    sx={{ ...DROPDOWN_CHEVRON_SX, transform: workZoneBgPopoverAnchor ? 'rotate(180deg)' : 'none' }}
+                  />
+                </Box>
+                <Popover
+                  open={Boolean(workZoneBgPopoverAnchor)}
+                  anchorEl={workZoneBgPopoverAnchor}
+                  onClose={() => setWorkZoneBgPopoverAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  slotProps={{ paper: { sx: getDropdownPopoverPaperSx(workZoneBgPopoverAnchor) } }}
+                >
+                  <Box sx={{ py: 0.5 }}>
+                    <Box
+                      onClick={() => handleWorkZoneBgMode('default')}
+                      sx={{
+                        ...dropdownItemSx,
+                        color: workZoneBgMode === 'default' ? 'white' : 'rgba(255,255,255,0.9)',
+                        fontWeight: workZoneBgMode === 'default' ? 600 : 400,
+                        bgcolor: workZoneBgMode === 'default' ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                      }}
+                    >
+                      По умолчанию
+                    </Box>
+                    <Box
+                      onClick={() => handleWorkZoneBgMode('starry')}
+                      sx={{
+                        ...dropdownItemSx,
+                        color: workZoneBgMode === 'starry' ? 'white' : 'rgba(255,255,255,0.9)',
+                        fontWeight: workZoneBgMode === 'starry' ? 600 : 400,
+                        bgcolor: workZoneBgMode === 'starry' ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                      }}
+                    >
+                      Звёздное небо
+                    </Box>
+                    <Box
+                      onClick={() => handleWorkZoneBgMode('snowfall')}
+                      sx={{
+                        ...dropdownItemSx,
+                        color: workZoneBgMode === 'snowfall' ? 'white' : 'rgba(255,255,255,0.9)',
+                        fontWeight: workZoneBgMode === 'snowfall' ? 600 : 400,
+                        bgcolor: workZoneBgMode === 'snowfall' ? DROPDOWN_ITEM_HOVER_BG : 'transparent',
+                      }}
+                    >
+                      Снегопад
+                    </Box>
+                  </Box>
+                </Popover>
+              </Box>
             </ListItem>
 
             <Divider />

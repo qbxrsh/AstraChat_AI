@@ -87,6 +87,10 @@ import { useTheme } from '@mui/material/styles';
 import AgentConstructorPanel from '../components/AgentConstructorPanel';
 import { getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, CHAT_GEAR_MENU_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
+import { getWorkZoneBackgroundColor, isWorkZoneAnimatedMode } from '../constants/workZoneBackground';
+import { useWorkZoneBgMode } from '../hooks/useWorkZoneBgMode';
+import WorkZoneStarrySky from '../components/WorkZoneStarrySky';
+import WorkZoneSnowfall from '../components/WorkZoneSnowfall';
 import {
   isKnowledgeRagEnabled,
   setKnowledgeRagEnabled,
@@ -225,6 +229,9 @@ export default function ProjectPage() {
   });
   const [rightSidebarPanelBg, setRightSidebarPanelBg] = useState(() => getSidebarPanelBackground());
   const [agentConstructorOpen, setAgentConstructorOpen] = useState(false);
+  const workZoneMode = useWorkZoneBgMode();
+  const workZoneAnimated = isWorkZoneAnimatedMode(workZoneMode);
+  const workZoneBgColor = getWorkZoneBackgroundColor(isDarkMode, workZoneMode);
 
   useEffect(() => {
     const onColorChanged = () => setRightSidebarPanelBg(getSidebarPanelBackground());
@@ -507,11 +514,12 @@ export default function ProjectPage() {
         height: '100vh', 
         display: 'flex', 
         flexDirection: 'column',
-        background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 50%, #1a1a1a 100%)'
-          : 'linear-gradient(135deg, #f5f5f5 0%, #ffffff 50%, #fafafa 100%)',
+        position: 'relative',
+        backgroundColor: workZoneBgColor,
       }}
     >
+      {workZoneMode === 'starry' ? <WorkZoneStarrySky isDarkMode={isDarkMode} /> : null}
+      {workZoneMode === 'snowfall' ? <WorkZoneSnowfall isDarkMode={isDarkMode} /> : null}
       {/* Основной контент с центрированием */}
       <Box
         sx={{
@@ -524,6 +532,8 @@ export default function ProjectPage() {
           py: 8,
           marginRight: rightSidebarHidden ? 0 : (rightSidebarOpen ? 0 : '-64px'),
           transition: 'margin-right 0.3s ease',
+          position: 'relative',
+          zIndex: 1,
         }}
       >
         {/* Заголовок проекта */}
@@ -555,6 +565,7 @@ export default function ProjectPage() {
           inputDisabled={!isConnected || isSending}
           inputRef={inputRef}
           isDarkMode={theme.palette.mode === 'dark'}
+          solidWorkZoneBackground={workZoneAnimated}
           styleVariant={chatInputStyle}
           containerSx={{
             mb: 3,
