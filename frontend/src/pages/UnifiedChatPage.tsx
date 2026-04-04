@@ -118,6 +118,27 @@ interface AgentStatus {
   orchestrator_active: boolean;
 }
 
+/** Drag файлов из ОС; выделенный текст даёт text/plain без Files — не показываем зону загрузки */
+function dataTransferHasFiles(dt: DataTransfer | null): boolean {
+  if (!dt) return false;
+  try {
+    if (dt.items?.length) {
+      for (let i = 0; i < dt.items.length; i++) {
+        if (dt.items[i].kind === 'file') return true;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  const types = dt.types;
+  if (!types || types.length === 0) return false;
+  const domTypes = types as unknown as { contains?: (s: string) => boolean };
+  if (typeof domTypes.contains === 'function') {
+    return domTypes.contains('Files');
+  }
+  return Array.from(types).includes('Files');
+}
+
 // ================================
 // ИНТЕРФЕЙС ДАННЫХ ДЛЯ КАРТОЧКИ СООБЩЕНИЯ
 // (callback-и передаются через ref, чтобы React.memo не реагировал на их пересоздание)
@@ -1776,23 +1797,30 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   };
 
   const handleDragOver = (e: React.DragEvent): void => {
+    if (!dataTransferHasFiles(e.dataTransfer)) {
+      return;
+    }
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
     setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent): void => {
+    if (!dataTransferHasFiles(e.dataTransfer)) {
+      return;
+    }
     e.preventDefault();
     setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent): void => {
-    e.preventDefault();
     setIsDragging(false);
-    
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      handleFileUpload(files[0]);
+    if (files.length === 0) {
+      return;
     }
+    e.preventDefault();
+    handleFileUpload(files[0]);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>): void => {
