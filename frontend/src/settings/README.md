@@ -221,19 +221,3 @@ import { resetSettings } from './settings';
 // Принудительная перезагрузка (например, после изменения config.yml)
 await resetSettings();
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

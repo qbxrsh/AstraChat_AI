@@ -480,7 +480,7 @@ export default function AgentsSettings() {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         Режим работы
                         <Tooltip
-                          title="Выберите режим работы: прямой (только модель), агентный (специализированные агенты) или прямой с несколькими LLM."
+                          title="Выберите режим работы: прямой (только модель) или агентный (специализированные агенты). Сравнение моделей включается кнопкой в чате."
                           arrow
                         >
                           <IconButton
@@ -531,7 +531,7 @@ export default function AgentsSettings() {
                       slotProps={{ paper: { sx: getDropdownPopoverPaperSx(modePopoverAnchor) } }}
                     >
                       <Box sx={{ py: 0.5 }}>
-                        {(['direct', 'agent', 'multi-llm'] as const).map((mode) => (
+                        {(['direct', 'agent'] as const).map((mode) => (
                           <Box
                             key={mode}
                             onClick={() => { switchMode(mode); setModePopoverAnchor(null); }}

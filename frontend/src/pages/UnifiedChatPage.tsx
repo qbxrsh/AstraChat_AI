@@ -18,8 +18,8 @@ import {
   Button,
   FormControl,
   InputLabel,
-  Select,
-  MenuItem,
+  OutlinedInput,
+  InputAdornment,
   Slider,
   CircularProgress,
   Popover,
@@ -53,16 +53,13 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
   Add as AddIcon,
-  Menu as MenuIcon,
-  Transcribe as TranscribeIcon,
-  AutoAwesome as PromptsIcon,
   Share as ShareIcon,
   AutoStories as KbIcon,
-  SmartToy as AgentConstructorIcon,
   YouTube as YouTubeIcon,
-  Slideshow as PresentationIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
-import { useAppContext, useAppActions, Message } from '../contexts/AppContext';
+import type { SxProps, Theme } from '@mui/material/styles';
+import { useAppContext, useAppActions, Message, MultiLLMResponseSlot } from '../contexts/AppContext';
 import { useSocket } from '../contexts/SocketContext';
 import { getApiUrl, getWsUrl, API_ENDPOINTS } from '../config/api';
 import MessageRenderer from '../components/MessageRenderer';
@@ -94,9 +91,27 @@ import {
 import {
   getDropdownPanelSx,
   getDropdownItemSx,
+  getFormFieldInputSx,
+  DROPDOWN_CHEVRON_SX,
+  DROPDOWN_PAPER_MARGIN_TOP,
+  DROPDOWN_PAPER_MIN_WIDTH_PX,
+  DROPDOWN_PAPER_DEFAULT_WIDTH_PX,
+  DROPDOWN_ITEM_HOVER_BG_DARK,
+  DROPDOWN_ITEM_HOVER_BG_LIGHT,
   MENU_ACTION_TEXT_SIZE,
   CHAT_GEAR_MENU_PANEL_WIDTH_PX,
+  SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+  SIDEBAR_LIST_ICON_SX,
+  SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX,
+  SIDEBAR_HIDE_SCROLLBAR_SX,
+  getSidebarRailCollapsedListItemButtonSx,
 } from '../constants/menuStyles';
+import SidebarRailMenuGlyph from '../components/SidebarRailMenuGlyph';
+import {
+  SidebarRailTranscribeIcon,
+  SidebarRailPromptsIcon,
+  SidebarRailAgentIcon,
+} from '../constants/sidebarRailIcons';
 
 interface UnifiedChatPageProps {
   isDarkMode: boolean;
@@ -106,14 +121,53 @@ interface UnifiedChatPageProps {
 interface ModelWindow {
   id: string;
   selectedModel: string;
-  response: string;
-  isStreaming: boolean;
-  error?: boolean;
+}
+
+/** Иконка «сравнение моделей» для тёмной темы (светлый глиф на тёмной кнопке). */
+const MULTI_LLM_COMPARE_ICON_DARK_THEME_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAKhJREFUOI2tkTEOwkAQA22EQJSQf+QVNPwqBaKAt9BS8Qv+QEfPVUNzh6KwURIUN9btWV7vrjQHgBOQGEYCjpFBAnYjGlXAO/ogqNVAHWl/kvQYNEDTY/BNshiKHcH2S9JaklxcbTtHPmTdPvM98832o6XFtpdBg23mTefdj6k7aPNfO2gjGqHgOtol37Uaofuer4xQElwkPYHVgEeSdJ41SXcH8ySZgg8Dm7tpcrd/HwAAAABJRU5ErkJggg==';
+
+/** Иконка для светлой темы (тёмный глиф на светлой кнопке). */
+const MULTI_LLM_COMPARE_ICON_LIGHT_THEME_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAAB2AAAAdgFOeyYIAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAJ5JREFUOI2tkksOwjAMRF8QEmIJ3INTsOFWCFXchi2r3qLn6L5ZhUVNlLbTph9GskZxrMnYMfwJL8ADIRMeKJSAB84zHroAjboIIne1ULUDJ0rgYaEEopPdiNUcauAA4BJVR2v5brmbcWn8AaqkNgBuL9RPxsfeeRJLZxB57QwiVAs/vJcIedqvySFdpE7bBfNWuQGeSmCLkw7WONmGL2KrPMuVWrUJAAAAAElFTkSuQmCC';
+
+function MultiLlmModeToggleIcon({ isDarkMode }: { isDarkMode: boolean }): React.ReactElement {
+  const src = isDarkMode
+    ? MULTI_LLM_COMPARE_ICON_DARK_THEME_DATA_URL
+    : MULTI_LLM_COMPARE_ICON_LIGHT_THEME_DATA_URL;
+  return (
+    <Box
+      component="img"
+      src={src}
+      alt=""
+      draggable={false}
+      sx={{
+        width: 16,
+        height: 16,
+        display: 'block',
+        flexShrink: 0,
+        objectFit: 'contain',
+        pointerEvents: 'none',
+      }}
+    />
+  );
 }
 
 /** Значение для Select / POST multi-llm: для llm-svc нужен полный path, иначе бэкенд не маршрутизирует хост. */
 function availableModelSelectValue(m: { name: string; path: string }): string {
   return m.path?.startsWith('llm-svc://') ? m.path : m.path || m.name;
+}
+
+/** Текст одного столбца multi-LLM как на экране (варианты перегенерации). */
+function getMultiLlmColumnDisplayText(slot: MultiLLMResponseSlot): string {
+  if (slot.alternativeResponses?.length && slot.currentResponseIndex !== undefined) {
+    const i = slot.currentResponseIndex;
+    if (i >= 0 && i < slot.alternativeResponses.length) {
+      const t = slot.alternativeResponses[i];
+      if (t !== undefined) return t;
+    }
+  }
+  return slot.content;
 }
 
 interface AgentStatus {
@@ -153,10 +207,20 @@ interface MessageCardData {
   handleCopyMessage: (content: string) => void;
   handleEditClick: (message: Message) => void;
   handleRegenerate: (message: Message) => void;
+  handleEditMultiLlmColumn: (message: Message, slotIndex: number) => void;
+  handleRegenerateMultiLlmColumn: (message: Message, slotIndex: number) => void;
   synthesizeSpeech: (text: string) => void;
   handleEnterShareMode: () => void;
   handleToggleMessage: (userMsgId: string, assistantMsgId: string) => void;
-  updateMessage: (chatId: string, messageId: string, content?: string, isStreaming?: boolean, multiLLMResponses?: Array<{ model: string; content: string; isStreaming?: boolean; error?: boolean }>, alternativeResponses?: string[], currentResponseIndex?: number) => void;
+  updateMessage: (
+    chatId: string,
+    messageId: string,
+    content?: string,
+    isStreaming?: boolean,
+    multiLLMResponses?: MultiLLMResponseSlot[],
+    alternativeResponses?: string[],
+    currentResponseIndex?: number,
+  ) => void;
   formatTimestamp: (ts: string) => string;
   currentChatId: string | undefined;
   messageRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
@@ -187,6 +251,19 @@ const MessageCardComponent = ({
 }: MessageCardProps): React.ReactElement => {
   const isUser = message.role === 'user';
   const [isHovered, setIsHovered] = useState(false);
+  const [hoveredMultiLlmCol, setHoveredMultiLlmCol] = useState<number | null>(null);
+  const hideOuterActionBar = !isUser && (message.multiLLMResponses?.length ?? 0) > 0;
+  const multiLlmActionIconSx = {
+    opacity: 0.7,
+    p: 0.5,
+    borderRadius: '6px',
+    minWidth: '28px',
+    width: '28px',
+    height: '28px',
+    '&:hover': { opacity: 1, '& .MuiSvgIcon-root': { color: 'primary.main' } },
+    '&:hover:not(:disabled)': { opacity: 1, '& .MuiSvgIcon-root': { color: 'primary.main' } },
+    '& .MuiSvgIcon-root': { fontSize: '18px !important', width: '18px !important', height: '18px !important' },
+  } as const;
   const shouldShowBorder = isUser
     ? !interfaceSettings.userNoBorder
     : !interfaceSettings.assistantNoBorder;
@@ -213,38 +290,213 @@ const MessageCardComponent = ({
           <DocumentSearchPanel trace={message.documentSearch} />
         )}
         {message.multiLLMResponses && message.multiLLMResponses.length > 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {message.multiLLMResponses.map((response, respIndex) => (
-              <Card
-                key={respIndex}
-                sx={{
-                  border: '1px solid',
-                  borderColor: response.error ? 'error.main' : 'divider',
-                  bgcolor: response.error ? 'error.light' : 'background.paper',
-                }}
-              >
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Typography variant="caption" fontWeight="bold" color={response.error ? 'error' : 'primary'}>
-                      {response.model}
-                    </Typography>
-                    {response.isStreaming && <Chip label="Генерируется..." size="small" color="info" />}
-                    {response.error && <Chip label="Ошибка" size="small" color="error" />}
-                  </Box>
-                  {response.error ? (
-                    <Alert severity="error" sx={{ mt: 1 }}>
-                      <Typography variant="body2">{response.content}</Typography>
-                    </Alert>
-                  ) : (
-                    <MessageRenderer
-                      content={response.content}
-                      isStreaming={response.isStreaming}
-                      onSendMessage={dataRef.current.handleSendMessageFromRenderer}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: `repeat(${Math.min(message.multiLLMResponses.length, 4)}, minmax(0, 1fr))`,
+              },
+              gap: 1.5,
+            }}
+          >
+            {message.multiLLMResponses.map((response, respIndex) => {
+              const displayBody = (() => {
+                if (response.alternativeResponses?.length && response.currentResponseIndex !== undefined) {
+                  const ci = response.currentResponseIndex;
+                  if (ci >= 0 && ci < response.alternativeResponses.length) {
+                    const alt = response.alternativeResponses[ci];
+                    if (alt !== undefined) return response.isStreaming ? alt : alt.trimEnd();
+                  }
+                }
+                return response.isStreaming ? response.content : response.content.trimEnd();
+              })();
+              return (
+                <Card
+                  key={`${response.model}-${respIndex}`}
+                  onMouseEnter={() => setHoveredMultiLlmCol(respIndex)}
+                  onMouseLeave={() => setHoveredMultiLlmCol((h) => (h === respIndex ? null : h))}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: response.error ? 'error.main' : 'divider',
+                    bgcolor: response.error ? 'error.light' : 'background.paper',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', pb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Typography variant="caption" fontWeight="bold" color={response.error ? 'error' : 'primary'}>
+                        {response.model}
+                      </Typography>
+                      {response.isStreaming && <Chip label="Генерируется..." size="small" color="info" />}
+                      {response.error && <Chip label="Ошибка" size="small" color="error" />}
+                    </Box>
+                    {response.error ? (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        <Typography variant="body2">{response.content}</Typography>
+                      </Alert>
+                    ) : (
+                      <MessageRenderer
+                        content={displayBody}
+                        isStreaming={response.isStreaming}
+                        onSendMessage={dataRef.current.handleSendMessageFromRenderer}
+                      />
+                    )}
+                  </CardContent>
+                  {!isUser && !response.error ? (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 0.5,
+                        px: 1,
+                        pb: 1,
+                        pt: 0,
+                        minHeight: 28,
+                        opacity: hoveredMultiLlmCol === respIndex ? 1 : 0,
+                        visibility: hoveredMultiLlmCol === respIndex ? 'visible' : 'hidden',
+                      }}
+                    >
+                      {response.alternativeResponses && response.alternativeResponses.length > 1 ? (
+                        <>
+                          <Tooltip title="Предыдущий вариант">
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  const ci = response.currentResponseIndex ?? 0;
+                                  if (ci <= 0 || !dataRef.current.currentChatId || !message.multiLLMResponses) return;
+                                  const ni = ci - 1;
+                                  const nextText = response.alternativeResponses![ni] ?? '';
+                                  const newCols = message.multiLLMResponses.map((r, i) =>
+                                    i === respIndex
+                                      ? { ...r, currentResponseIndex: ni, content: nextText }
+                                      : r,
+                                  );
+                                  dataRef.current.updateMessage(
+                                    dataRef.current.currentChatId,
+                                    message.id,
+                                    undefined,
+                                    false,
+                                    newCols,
+                                  );
+                                }}
+                                disabled={(response.currentResponseIndex ?? 0) === 0}
+                                sx={multiLlmActionIconSx}
+                              >
+                                <ChevronLeftIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Typography
+                            variant="caption"
+                            sx={{ opacity: 0.7, fontSize: '0.7rem', minWidth: '35px', textAlign: 'center' }}
+                          >
+                            {((response.currentResponseIndex ?? 0) + 1)}/{response.alternativeResponses.length}
+                          </Typography>
+                          <Tooltip title="Следующий вариант">
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  const ci = response.currentResponseIndex ?? 0;
+                                  const al = response.alternativeResponses!;
+                                  if (
+                                    ci >= al.length - 1 ||
+                                    !dataRef.current.currentChatId ||
+                                    !message.multiLLMResponses
+                                  )
+                                    return;
+                                  const ni = ci + 1;
+                                  const nextText = al[ni] ?? '';
+                                  const newCols = message.multiLLMResponses.map((r, i) =>
+                                    i === respIndex
+                                      ? { ...r, currentResponseIndex: ni, content: nextText }
+                                      : r,
+                                  );
+                                  dataRef.current.updateMessage(
+                                    dataRef.current.currentChatId,
+                                    message.id,
+                                    undefined,
+                                    false,
+                                    newCols,
+                                  );
+                                }}
+                                disabled={
+                                  (response.currentResponseIndex ?? 0) >= response.alternativeResponses.length - 1
+                                }
+                                sx={multiLlmActionIconSx}
+                              >
+                                <ChevronRightIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Box sx={{ width: '1px', height: '16px', bgcolor: 'divider', mx: 0.5 }} />
+                        </>
+                      ) : null}
+                      <Tooltip title="Копировать">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            dataRef.current.handleCopyMessage(getMultiLlmColumnDisplayText(response))
+                          }
+                          sx={multiLlmActionIconSx}
+                        >
+                          <CopyIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Редактировать">
+                        <IconButton
+                          size="small"
+                          onClick={() => dataRef.current.handleEditMultiLlmColumn(message, respIndex)}
+                          sx={multiLlmActionIconSx}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Перегенерировать">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => dataRef.current.handleRegenerateMultiLlmColumn(message, respIndex)}
+                            disabled={Boolean(response.isStreaming)}
+                            sx={multiLlmActionIconSx}
+                          >
+                            <RefreshIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Прочесть вслух">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            dataRef.current.synthesizeSpeech(getMultiLlmColumnDisplayText(response))
+                          }
+                          disabled={isSpeaking}
+                          sx={multiLlmActionIconSx}
+                        >
+                          <VolumeUpIcon />
+                        </IconButton>
+                      </Tooltip>
+                      {!shareMode ? (
+                        <Tooltip title="Поделиться">
+                          <IconButton
+                            size="small"
+                            onClick={() => dataRef.current.handleEnterShareMode()}
+                            sx={multiLlmActionIconSx}
+                          >
+                            <ShareIcon />
+                          </IconButton>
+                        </Tooltip>
+                      ) : null}
+                    </Box>
+                  ) : null}
+                </Card>
+              );
+            })}
           </Box>
         ) : (
           <MessageRenderer
@@ -315,7 +567,8 @@ const MessageCardComponent = ({
           </Box>
         )}
 
-        {/* Кнопки действий снизу карточки */}
+        {/* Кнопки действий снизу карточки (для multi-LLM — только под каждой колонкой) */}
+        {!hideOuterActionBar && (
         <Box sx={{
           display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5,
           mt: 1, minHeight: 28,
@@ -472,6 +725,7 @@ const MessageCardComponent = ({
             </Tooltip>
           )}
         </Box>
+        )}
       </Box>
     </Box>
   );
@@ -566,6 +820,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   // Состояние для редактирования сообщений
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editingMultiLlmSlotIndex, setEditingMultiLlmSlotIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   
   const [showVoiceDialog, setShowVoiceDialog] = useState(false);
@@ -659,15 +914,81 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     getProjectById,
     setLoading,
   } = useAppActions();
-  const { sendMessage, regenerateResponse, isConnected, isConnecting, stopGeneration, socket, onMultiLLMEvent, offMultiLLMEvent } = useSocket();
+  const { sendMessage, regenerateResponse, regenerateMultiLlmSlot, isConnected, isConnecting, stopGeneration } =
+    useSocket();
 
   // Получаем текущий чат и сообщения
   const currentChat = getCurrentChat();
   const messages = getCurrentMessages();
   const project = currentChat?.projectId ? getProjectById(currentChat.projectId) : null;
 
+  const hasActiveChatStreaming = useMemo(
+    () =>
+      messages.some(
+        (m) =>
+          m.isStreaming || (m.multiLLMResponses?.some((r) => r.isStreaming) ?? false),
+      ),
+    [messages],
+  );
+
   const dropdownPanelSx = getDropdownPanelSx(isDarkMode);
   const dropdownItemSx = useMemo(() => getDropdownItemSx(isDarkMode), [isDarkMode]);
+
+  /** Как поле «Модель» / «Категория» в AgentConstructorPanel: outlined без синей обводки при «фокусе». */
+  const multiLlmFormFieldInputSx = useMemo(() => getFormFieldInputSx(isDarkMode), [isDarkMode]);
+  const multiLlmModelFieldSx = useMemo(
+    () =>
+      [
+        multiLlmFormFieldInputSx,
+        {
+          '& .MuiOutlinedInput-root': { cursor: 'pointer' },
+          '& .MuiOutlinedInput-root.Mui-focused fieldset': {
+            borderColor: isDarkMode ? 'rgba(255,255,255,0.23)' : 'rgba(0,0,0,0.23)',
+            borderWidth: '1px',
+          },
+          '& .MuiOutlinedInput-root:hover fieldset': {
+            borderColor: isDarkMode ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+          },
+          '& .MuiOutlinedInput-root.Mui-focused:hover fieldset': {
+            borderColor: isDarkMode ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+          },
+          '& .MuiInputLabel-root.Mui-focused': {
+            color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)',
+          },
+          '& .MuiFormLabel-asterisk': { color: '#f44336' },
+        },
+      ] as SxProps<Theme>,
+    [multiLlmFormFieldInputSx, isDarkMode],
+  );
+
+  /** Выровнять по высоте с триггером AgentSelector (py 0.75 + строка ~0.82rem) — компактнее 32px. */
+  const multiLlmModeToggleIconButtonSx = useMemo(
+    () => ({
+      flexShrink: 0,
+      boxSizing: 'border-box' as const,
+      width: 30,
+      height: 30,
+      minWidth: 30,
+      minHeight: 30,
+      p: 0,
+      m: 0,
+      borderRadius: '10px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'visible',
+      lineHeight: 0,
+      bgcolor: isDarkMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.9)',
+      border: isDarkMode ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.12)',
+      color: isDarkMode ? 'white' : 'text.primary',
+      transition: 'background 0.15s, border-color 0.15s',
+      '&:hover': {
+        bgcolor: isDarkMode ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,1)',
+        borderColor: isDarkMode ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)',
+      },
+    }),
+    [isDarkMode],
+  );
 
   // Сбрасываем поле ввода при переключении между чатами, чтобы черновик не "дублировался"
   useEffect(() => {
@@ -694,18 +1015,20 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   // Состояние для режима multi-llm
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [availableModels, setAvailableModels] = useState<Array<{ name: string; path: string; size_mb?: number }>>([]);
-  const [modelWindows, setModelWindows] = useState<ModelWindow[]>([
-    { id: '1', selectedModel: '', response: '', isStreaming: false }
-  ]);
-  const [conversationHistory, setConversationHistory] = useState<Array<{
-    userMessage: string;
-    responses: Array<{model: string; content: string; error?: boolean}>;
-    timestamp: string;
-  }>>([]);
-  const currentMultiLLMRequestRef = useRef<string | null>(null);
+  const [modelWindows, setModelWindows] = useState<ModelWindow[]>([{ id: '1', selectedModel: '' }]);
+  const [multiLlmModelMenu, setMultiLlmModelMenu] = useState<{ windowId: string; anchorEl: HTMLElement } | null>(null);
+  const isMultiLlmMode = agentStatus?.mode === 'multi-llm';
+  const multiLlmHasSelection = useMemo(
+    () => modelWindows.some((w) => Boolean(w.selectedModel)),
+    [modelWindows],
+  );
+  const multiLlmInputBlocked = isMultiLlmMode && !multiLlmHasSelection;
+  const chatAwaitingTokens = state.isLoading && !hasActiveChatStreaming;
   const prevAgentModeRef = useRef<string | undefined>(undefined);
   const skipNextMultiLlmChatResetRef = useRef(false);
   const lastMultiLlmPostedKeyRef = useRef<string>('');
+  /** Режим до входа в multi-llm с рабочей области — для возврата по кнопке. */
+  const modeBeforeMultiLlmRef = useRef<string>('direct');
 
   const loadAgentStatus = useCallback(async () => {
     try {
@@ -723,6 +1046,86 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       /* ignore */
     }
   }, []);
+
+  const handleToggleMultiLlmMode = useCallback(async () => {
+    if (!agentStatus?.is_initialized) {
+      showNotification(
+        'warning',
+        'Агентная архитектура не инициализирована. Настройки → Агенты → инициализация.',
+      );
+      return;
+    }
+    if (state.isLoading || hasActiveChatStreaming) {
+      showNotification('warning', 'Дождитесь окончания генерации перед сменой режима');
+      return;
+    }
+    try {
+      if (agentStatus.mode === 'multi-llm') {
+        const restore =
+          modeBeforeMultiLlmRef.current === 'multi-llm' ? 'direct' : modeBeforeMultiLlmRef.current;
+        const response = await fetch(getApiUrl('/api/agent/mode'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: restore }),
+        });
+        if (!response.ok) throw new Error('mode');
+        await loadAgentStatus();
+        window.dispatchEvent(new CustomEvent('astrachatAgentStatusChanged'));
+        showNotification(
+          'info',
+          restore === 'agent' ? 'Включён агентный режим' : 'Включён прямой режим чата',
+        );
+        return;
+      }
+      modeBeforeMultiLlmRef.current = agentStatus.mode;
+      const response = await fetch(getApiUrl('/api/agent/mode'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'multi-llm' }),
+      });
+      if (!response.ok) throw new Error('mode');
+      await loadAgentStatus();
+      window.dispatchEvent(new CustomEvent('astrachatAgentStatusChanged'));
+      showNotification('info', 'Режим: сравнение моделей');
+    } catch {
+      showNotification('error', 'Не удалось переключить режим');
+    }
+  }, [agentStatus, loadAgentStatus, showNotification, state.isLoading, hasActiveChatStreaming]);
+
+  /** Кнопка multi-LLM в поле ввода, когда селектор модели/агента спрятан в настройках. */
+  const multiLlmSettingsExtraAction = useMemo(
+    () =>
+      modelSelectorMode === 'settings' ? (
+        <Tooltip title="Сравнение моделей">
+          <span>
+            <IconButton
+              onClick={() => {
+                void handleToggleMultiLlmMode();
+              }}
+              disabled={
+                !agentStatus?.is_initialized ||
+                !isConnected ||
+                state.isLoading ||
+                hasActiveChatStreaming
+              }
+              sx={multiLlmModeToggleIconButtonSx}
+            >
+              <MultiLlmModeToggleIcon isDarkMode={isDarkMode} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      ) : null,
+    [
+      modelSelectorMode,
+      handleToggleMultiLlmMode,
+      agentStatus?.is_initialized,
+      isConnected,
+      state.isLoading,
+      hasActiveChatStreaming,
+      isDarkMode,
+      multiLlmModeToggleIconButtonSx,
+    ],
+  );
 
   // Убираем автоматическое создание чатов - чаты создаются только по кнопке
 
@@ -867,17 +1270,14 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   // Отслеживаем завершение генерации сообщений для воспроизведения звука
   const prevStreamingRef = useRef<boolean>(false);
   useEffect(() => {
-    const hasStreamingMessages = messages.some(msg => msg.isStreaming);
-    const hasStreamingMultiLLM = modelWindows.some(w => w.isStreaming);
-    const isCurrentlyStreaming = hasStreamingMessages || hasStreamingMultiLLM;
-    
-    // Если стриминг только что завершился (был true, стал false), воспроизводим звук
+    const isCurrentlyStreaming = hasActiveChatStreaming;
+
     if (prevStreamingRef.current && !isCurrentlyStreaming) {
       playNotificationSound();
     }
-    
+
     prevStreamingRef.current = isCurrentlyStreaming;
-  }, [messages, modelWindows, playNotificationSound]);
+  }, [hasActiveChatStreaming, playNotificationSound]);
 
   // Фокус на поле ввода при загрузке
   useEffect(() => {
@@ -949,13 +1349,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       skipNextMultiLlmChatResetRef.current = false;
       return;
     }
-    setConversationHistory([]);
-    currentMultiLLMRequestRef.current = null;
-    setModelWindows((prev) =>
-      prev.length === 0
-        ? [{ id: '1', selectedModel: '', response: '', isStreaming: false }]
-        : prev.map((w) => ({ ...w, response: '', isStreaming: false, error: false }))
-    );
+    setModelWindows((prev) => (prev.length === 0 ? [{ id: '1', selectedModel: '' }] : prev));
   }, [state.currentChatId]);
 
   // После переключения режима с multi-llm на другой — убираем многоколоночный layout со страницы чата
@@ -963,9 +1357,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     const mode = agentStatus?.mode;
     const prev = prevAgentModeRef.current;
     if (prev === 'multi-llm' && mode && mode !== 'multi-llm') {
-      setModelWindows([{ id: '1', selectedModel: '', response: '', isStreaming: false }]);
-      setConversationHistory([]);
-      currentMultiLLMRequestRef.current = null;
+      setModelWindows([{ id: '1', selectedModel: '' }]);
     }
     prevAgentModeRef.current = mode;
   }, [agentStatus?.mode]);
@@ -975,174 +1367,6 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       lastMultiLlmPostedKeyRef.current = '';
     }
   }, [agentStatus?.mode]);
-
-  // Подписка на событие остановки генерации и завершения генерации
-  useEffect(() => {
-    if (!socket) return;
-    
-    const handleGenerationStopped = () => {
-      // Обновляем состояние всех окон моделей - останавливаем стриминг
-      setModelWindows(prev => prev.map(w => ({ ...w, isStreaming: false })));
-      
-      // Также обновляем состояние сообщений в истории
-      setConversationHistory(prev => {
-        if (prev.length === 0) return prev;
-        const lastIndex = prev.length - 1;
-        const last = prev[lastIndex];
-        if (!last) return prev;
-        const next = [...prev];
-        next[lastIndex] = {
-          ...last,
-          responses: last.responses.map(r => ({ ...r, isStreaming: false })),
-        };
-        return next;
-      });
-    };
-    
-    const handleChatComplete = (data: any) => {
-      // В multi-llm бэкенд не шлёт chat_complete; если событие пришло откуда-то ещё — не сбрасываем окна
-      if (agentStatus?.mode === 'multi-llm') {
-        return;
-      }
-      // Когда генерация завершена, обновляем состояние всех окон моделей
-
-      setModelWindows(prev => {
-        const updated = prev.map(w => ({ ...w, isStreaming: false }));
-
-        return updated;
-      });
-      
-      // Также обновляем состояние сообщений в истории
-      setConversationHistory(prev => {
-        if (prev.length === 0) return prev;
-        const lastIndex = prev.length - 1;
-        const last = prev[lastIndex];
-        if (!last) return prev;
-        const next = [...prev];
-        next[lastIndex] = {
-          ...last,
-          responses: last.responses.map(r => ({ ...r, isStreaming: false })),
-        };
-        return next;
-      });
-    };
-    
-    socket.on('generation_stopped', handleGenerationStopped);
-    socket.on('chat_complete', handleChatComplete);
-    
-    
-    
-    return () => {
-      
-      socket.off('generation_stopped', handleGenerationStopped);
-      socket.off('chat_complete', handleChatComplete);
-    };
-  }, [socket, agentStatus?.mode]);
-
-  // Подписка на события Socket.IO для режима multi-llm
-  useEffect(() => {
-    if (agentStatus?.mode !== 'multi-llm' || !socket || !onMultiLLMEvent || !offMultiLLMEvent) return;
-    
-    const handleMultiLLMStart = (data: any) => {
-      
-      currentMultiLLMRequestRef.current = new Date().toISOString();
-      
-      // Устанавливаем isStreaming: true для соответствующей модели
-      const modelName = data.model || '';
-      if (modelName) {
-        setModelWindows(prev => prev.map(w => 
-          w.selectedModel === modelName 
-            ? { ...w, isStreaming: true, error: false }
-            : w
-        ));
-      }
-    };
-
-    const handleMultiLLMChunk = (data: any) => {
-      
-      const modelName = data.model || 'unknown';
-      const accumulated = data.accumulated || '';
-      
-      // Обновляем ответ в истории для текущего запроса
-      setConversationHistory(prev => {
-        if (prev.length === 0) return prev;
-        const lastIndex = prev.length - 1;
-        const last = prev[lastIndex];
-        const responses = [...last.responses];
-        const existingResponseIndex = responses.findIndex(r => r.model === modelName);
-
-        if (existingResponseIndex >= 0) {
-          responses[existingResponseIndex] = {
-            ...responses[existingResponseIndex],
-            content: accumulated,
-          };
-        } else {
-          responses.push({ model: modelName, content: accumulated });
-        }
-
-        const next = [...prev];
-        next[lastIndex] = { ...last, responses };
-        return next;
-      });
-      
-      // Обновляем состояние окна для потоковой генерации
-      setModelWindows(prev => prev.map(w => 
-        w.selectedModel === modelName 
-          ? { ...w, response: accumulated, isStreaming: true }
-          : w
-      ));
-    };
-
-    const handleMultiLLMComplete = (data: any) => {
-      
-      const modelName = data.model || 'unknown';
-      const response = data.response || '';
-      const hasError = data.error || false;
-      
-      setConversationHistory(prev => {
-        if (prev.length === 0) return prev;
-        const lastIndex = prev.length - 1;
-        const last = prev[lastIndex];
-        const responses = [...last.responses];
-        const existingResponseIndex = responses.findIndex(r => r.model === modelName);
-
-        if (existingResponseIndex >= 0) {
-          responses[existingResponseIndex] = {
-            model: modelName,
-            content: response,
-            error: hasError,
-          };
-        } else {
-          responses.push({ model: modelName, content: response, error: hasError });
-        }
-
-        const next = [...prev];
-        next[lastIndex] = { ...last, responses };
-        return next;
-      });
-      
-      // Обновляем состояние окна - завершаем стриминг
-      setModelWindows(prev => prev.map(w => 
-        w.selectedModel === modelName 
-          ? { ...w, response, isStreaming: false, error: hasError }
-          : w
-      ));
-    };
-
-    // Подписываемся на события
-    onMultiLLMEvent('multi_llm_start', handleMultiLLMStart);
-    onMultiLLMEvent('multi_llm_chunk', handleMultiLLMChunk);
-    onMultiLLMEvent('multi_llm_complete', handleMultiLLMComplete);
-
-    return () => {
-      // Отписываемся от событий
-      if (offMultiLLMEvent) {
-        offMultiLLMEvent('multi_llm_start', handleMultiLLMStart);
-        offMultiLLMEvent('multi_llm_chunk', handleMultiLLMChunk);
-        offMultiLLMEvent('multi_llm_complete', handleMultiLLMComplete);
-      }
-    };
-  }, [agentStatus?.mode, socket, onMultiLLMEvent, offMultiLLMEvent]);
 
   // Загружаем список документов при инициализации
   useEffect(() => {
@@ -1185,7 +1409,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       return;
     }
     const newId = String(modelWindows.length + 1);
-    setModelWindows([...modelWindows, { id: newId, selectedModel: '', response: '', isStreaming: false }]);
+    setModelWindows([...modelWindows, { id: newId, selectedModel: '' }]);
   };
 
   const removeModelWindow = (id: string): void => {
@@ -1216,8 +1440,22 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     updateModelWindow(windowId, { selectedModel: modelName });
   };
 
+  useEffect(() => {
+    if (hasActiveChatStreaming) setMultiLlmModelMenu(null);
+  }, [hasActiveChatStreaming]);
+
+  useEffect(() => {
+    setMultiLlmModelMenu((prev) =>
+      prev && !modelWindows.some((w) => w.id === prev.windowId) ? null : prev,
+    );
+  }, [modelWindows]);
+
   const handleSendMessageMultiLLM = async (): Promise<void> => {
     if (!inputMessage.trim() || !isConnected) {
+      return;
+    }
+
+    if (state.isLoading || hasActiveChatStreaming) {
       return;
     }
 
@@ -1233,23 +1471,6 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
       skipNextMultiLlmChatResetRef.current = true;
       setCurrentChat(chatId);
     }
-
-    setConversationHistory((prev) => [
-      ...prev,
-      {
-        userMessage: inputMessage.trim(),
-        responses: [],
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-
-    // Одним setState для всех окон — иначе несколько updateModelWindow подряд могут
-    // из-за батчинга оставить isStreaming: true только у последнего окна.
-    setModelWindows((prev) =>
-      prev.map((w) =>
-        w.selectedModel ? { ...w, response: '', isStreaming: true, error: false } : w
-      )
-    );
 
     setLoading(true);
 
@@ -1269,22 +1490,15 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
         lastMultiLlmPostedKeyRef.current = modelsKey;
       }
 
-      // Отправляем сообщение через Socket.IO
-      // Сообщение будет обработано через SocketContext, который отследит режим multi-llm
-      // и разошлет запросы ко всем выбранным моделям
-      
-      sendMessage(inputMessage.trim(), chatId);
+      sendMessage(inputMessage.trim(), chatId, true, undefined, true);
 
       setInputMessage('');
-      
-      // Возвращаем фокус на поле ввода
+
       setTimeout(() => {
         inputRef.current?.focus();
       }, 10);
-    } catch (error) {
+    } catch {
       setLoading(false);
-      setModelWindows((prev) => prev.map((w) => ({ ...w, isStreaming: false })));
-      setConversationHistory((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
       showNotification('error', 'Ошибка отправки сообщения');
     }
   };
@@ -1377,9 +1591,74 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   };
 
   // Функция для перегенерации ответа LLM
+  const handleEditMultiLlmColumn = useCallback((message: Message, slotIndex: number): void => {
+    const slot = message.multiLLMResponses?.[slotIndex];
+    if (!slot) return;
+    setEditingMessage(message);
+    setEditingMultiLlmSlotIndex(slotIndex);
+    setEditText(getMultiLlmColumnDisplayText(slot));
+    setEditDialogOpen(true);
+  }, []);
+
+  const handleRegenerateMultiLlmColumn = useCallback(
+    (message: Message, slotIndex: number): void => {
+      if (!currentChat || !isConnected) {
+        showNotification('error', 'Нет соединения с сервером');
+        return;
+      }
+      const col = message.multiLLMResponses?.[slotIndex];
+      if (!col || col.error) return;
+      if (col.isStreaming) {
+        showNotification('warning', 'Дождитесь окончания генерации этой модели');
+        return;
+      }
+      const messageIndex = messages.findIndex((m) => m.id === message.id);
+      let userMessage: Message | null = null;
+      for (let i = messageIndex - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          userMessage = messages[i];
+          break;
+        }
+      }
+      if (!userMessage) {
+        showNotification('error', 'Не найдено предыдущее сообщение пользователя');
+        return;
+      }
+      const displayText = getMultiLlmColumnDisplayText(col);
+      let alts =
+        col.alternativeResponses && col.alternativeResponses.length > 0
+          ? [...col.alternativeResponses]
+          : [displayText];
+      const ci = col.currentResponseIndex ?? 0;
+      if (ci < alts.length) alts[ci] = displayText;
+      const newIndex = alts.length;
+      alts = [...alts, ''];
+
+      const newCols = message.multiLLMResponses!.map((r, i) =>
+        i === slotIndex
+          ? {
+              ...r,
+              alternativeResponses: alts,
+              currentResponseIndex: newIndex,
+              isStreaming: true,
+              content: '',
+            }
+          : { ...r, isStreaming: false },
+      );
+      updateMessage(currentChat.id, message.id, undefined, true, newCols);
+      regenerateMultiLlmSlot(userMessage.content, message.id, currentChat.id, col.model);
+    },
+    [currentChat, isConnected, messages, regenerateMultiLlmSlot, showNotification, updateMessage],
+  );
+
   const handleRegenerate = (message: Message, customUserMessage?: string): void => {
     if (!currentChat || !isConnected) {
       showNotification('error', 'Нет соединения с сервером');
+      return;
+    }
+
+    if (message.multiLLMResponses && message.multiLLMResponses.length > 0) {
+      showNotification('info', 'Используйте «Перегенерировать» под нужной моделью');
       return;
     }
 
@@ -1454,6 +1733,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   // Функция для открытия диалога редактирования
   const handleEditClick = (message: Message): void => {
     setEditingMessage(message);
+    setEditingMultiLlmSlotIndex(null);
     setEditText(message.content);
     setEditDialogOpen(true);
   };
@@ -1465,6 +1745,27 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     }
 
     const trimmedContent = editText.trim();
+
+    if (editingMultiLlmSlotIndex !== null && editingMessage.multiLLMResponses) {
+      const idx = editingMultiLlmSlotIndex;
+      const next = editingMessage.multiLLMResponses.map((r, i) =>
+        i === idx
+          ? {
+              ...r,
+              content: trimmedContent,
+              alternativeResponses: undefined,
+              currentResponseIndex: undefined,
+            }
+          : r,
+      );
+      updateMessage(currentChat.id, editingMessage.id, undefined, false, next);
+      showNotification('success', 'Ответ модели обновлён');
+      setEditDialogOpen(false);
+      setEditingMessage(null);
+      setEditingMultiLlmSlotIndex(null);
+      setEditText('');
+      return;
+    }
     
     // Обновляем сообщение в локальном состоянии
     updateMessage(currentChat.id, editingMessage.id, trimmedContent);
@@ -1563,6 +1864,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   const handleCancelEdit = (): void => {
     setEditDialogOpen(false);
     setEditingMessage(null);
+    setEditingMultiLlmSlotIndex(null);
     setEditText('');
   };
 
@@ -2029,26 +2331,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
   };
 
   const handleStopGeneration = (): void => {
-    // Останавливаем генерацию через WebSocket
     stopGeneration();
-    
-    // Обновляем состояние всех окон моделей - останавливаем стриминг
-    setModelWindows(prev => prev.map(w => ({ ...w, isStreaming: false })));
-    
-    // Также обновляем состояние сообщений в истории
-    setConversationHistory(prev => {
-      if (prev.length === 0) return prev;
-      const updated = [...prev];
-      const lastIndex = updated.length - 1;
-      if (updated[lastIndex]) {
-        updated[lastIndex] = {
-          ...updated[lastIndex],
-          responses: updated[lastIndex].responses.map(r => ({ ...r, isStreaming: false }))
-        };
-      }
-      return updated;
-    });
-    
     showNotification('info', 'Генерация остановлена');
   };
 
@@ -2243,6 +2526,8 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     handleCopyMessage,
     handleEditClick,
     handleRegenerate,
+    handleEditMultiLlmColumn,
+    handleRegenerateMultiLlmColumn,
     synthesizeSpeech,
     handleEnterShareMode,
     handleToggleMessage,
@@ -2252,404 +2537,220 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
     messageRefs,
   };
 
-  // Если режим multi-llm, показываем специальный UI
-  if (agentStatus?.mode === 'multi-llm') {
-    const anyMultiWindowStreaming = modelWindows.some((w) => w.isStreaming && !!w.selectedModel);
-    const multiLlmWaitingUi = state.isLoading || anyMultiWindowStreaming;
+  const renderMultiLlmModelToolbar = (): React.ReactNode => {
+    if (!isMultiLlmMode) return null;
+    const barMaxWidth = interfaceSettings.widescreenMode ? '100%' : messages.length === 0 ? '800px' : '1000px';
+    const barPx =
+      interfaceSettings.chatInputStyle === 'classic' ? 0 : interfaceSettings.widescreenMode ? 4 : 2;
+
+    const displayModelLabel = (val: string): string => {
+      if (!val) return '';
+      const row = availableModels.find((x) => availableModelSelectValue(x) === val);
+      return row?.name ?? val.replace('llm-svc://', '').split('/').pop() ?? val;
+    };
+
+    const menuWindowId = multiLlmModelMenu?.windowId ?? null;
+    const menuAnchor = multiLlmModelMenu?.anchorEl ?? null;
+    const menuOpen = Boolean(menuAnchor);
+    const menuWin = menuWindowId ? modelWindows.find((w) => w.id === menuWindowId) : undefined;
+    const selectedRowBg = isDarkMode ? DROPDOWN_ITEM_HOVER_BG_DARK : DROPDOWN_ITEM_HOVER_BG_LIGHT;
+    const menuItemMuted = isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.87)';
 
     return (
       <Box
         sx={{
           display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 1,
+          width: '100%',
+          maxWidth: barMaxWidth,
+          mx: 'auto',
+          px: barPx,
+          mb: 1,
           position: 'relative',
-          backgroundColor: workZoneBgColor,
+          zIndex: workZoneAnimated ? 2 : undefined,
         }}
       >
-        {workZoneMode === 'starry' ? <WorkZoneStarrySky isDarkMode={isDarkMode} /> : null}
-        {workZoneMode === 'snowfall' ? <WorkZoneSnowfall isDarkMode={isDarkMode} /> : null}
-        {/* Основная область с окнами моделей */}
-        <Box
-          sx={{
-            flex: 1,
-            display: 'grid',
-            gridTemplateColumns: `repeat(${modelWindows.length}, 1fr)`,
-            gap: 2,
-            p: 2,
-            overflow: 'hidden',
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          {modelWindows.map((window) => {
-            const isStreaming = modelWindows.find(w => w.id === window.id)?.isStreaming || false;
-            
-            return (
-              <Box 
-                key={window.id} 
-                sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  border: '1px solid', 
-                  borderColor: 'divider',
-                  borderRadius: 2,
-                  bgcolor: 'background.paper',
-                  overflow: 'hidden'
+        {modelWindows.map((window) => (
+          <Box
+            key={window.id}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              flex: '1 1 160px',
+              minWidth: { xs: '100%', sm: 160 },
+              maxWidth: { sm: 280 },
+            }}
+          >
+            <FormControl
+              variant="outlined"
+              fullWidth
+              size="small"
+              required
+              sx={multiLlmModelFieldSx}
+              disabled={availableModels.length === 0 || hasActiveChatStreaming}
+            >
+              <InputLabel htmlFor={`multi-llm-model-${window.id}`}>Модель</InputLabel>
+              <OutlinedInput
+                id={`multi-llm-model-${window.id}`}
+                label="Модель"
+                value={displayModelLabel(window.selectedModel)}
+                readOnly
+                placeholder="Выберите модель"
+                onClick={(e) => {
+                  if (availableModels.length === 0 || hasActiveChatStreaming) return;
+                  const root = (e.currentTarget as HTMLElement).closest('.MuiOutlinedInput-root') as HTMLElement | null;
+                  if (!root) return;
+                  setMultiLlmModelMenu((prev) =>
+                    prev?.windowId === window.id && prev.anchorEl === root ? null : { windowId: window.id, anchorEl: root },
+                  );
                 }}
-              >
-                {/* Выбор модели над окном */}
-                <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default', display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Модель</InputLabel>
-                    <Select
-                      value={window.selectedModel}
-                      label="Модель"
-                      onChange={(e) => handleModelSelect(window.id, e.target.value)}
-                      disabled={availableModels.length === 0}
-                      renderValue={(val) => {
-                        if (!val) return <em>Не выбрано</em>;
-                        const row = availableModels.find((x) => availableModelSelectValue(x) === val);
-                        return row?.name ?? val;
-                      }}
-                    >
-                      <MenuItem value="">
-                        <em>Не выбрано</em>
-                      </MenuItem>
-                      {availableModels.length === 0 ? (
-                        <MenuItem disabled>
-                          Загрузка моделей...
-                        </MenuItem>
-                      ) : (
-                        availableModels
-                          .filter((m) => {
-                            const k = availableModelSelectValue(m);
-                            const isSelectedElsewhere = modelWindows.some(
-                              (w) => w.id !== window.id && w.selectedModel === k
-                            );
-                            return !isSelectedElsewhere || window.selectedModel === k;
-                          })
-                          .map((model) => (
-                            <MenuItem key={availableModelSelectValue(model)} value={availableModelSelectValue(model)}>
-                              {model.name}
-                            </MenuItem>
-                          ))
-                      )}
-                    </Select>
-                  </FormControl>
-                  {modelWindows.length > 1 && (
-                    <IconButton
-                      size="small"
-                      onClick={() => removeModelWindow(window.id)}
-                      color="error"
-                      sx={{ flexShrink: 0 }}
-                    >
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </Box>
-                
-                {/* Область истории и ответов */}
-                <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-                  {conversationHistory.length === 0 ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                      <Typography variant="body2" color="text.secondary" align="center">
-                        Выберите модель и отправьте сообщение для начала диалога
-                      </Typography>
-                    </Box>
-                  ) : (
-                    conversationHistory.map((conv, idx) => {
-                      const response = conv.responses.find(r => r.model === window.selectedModel);
-                      const responseHasText =
-                        !!response && (response.content ?? '').trim().length > 0;
-                      return (
-                        <Box key={idx} sx={{ mb: 2 }}>
-                          {/* Сообщение пользователя */}
-                          <Card sx={{ mb: 1, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-                            <CardContent sx={{ p: 1.5, pb: 1.5 }}>
-                              <Typography variant="body2">{conv.userMessage}</Typography>
-                            </CardContent>
-                          </Card>
-                          
-                          {/* Ответ модели */}
-                          <Card sx={{ bgcolor: response?.error ? 'error.light' : 'background.paper' }}>
-                            <CardContent sx={{ p: 1.5 }}>
-                              {response?.error ? (
-                                  <Alert severity="error" sx={{ mb: 0 }}>
-                                    <Typography variant="body2">{response.content}</Typography>
-                                  </Alert>
-                                ) : responseHasText ? (
-                                  <MessageRenderer 
-                                    content={response.content}
-                                    onSendMessage={(prompt) => {
-                                      if (currentChat && isConnected && !state.isLoading) {
-                                        sendMessage(prompt, currentChat.id);
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                idx === conversationHistory.length - 1 &&
-                                  window.selectedModel &&
-                                  multiLlmWaitingUi &&
-                                  modelWindows.some((w) => w.isStreaming && !!w.selectedModel) ? (
-                                  // Multi-LLM: бэкенд шлёт обе модели параллельно; «очереди» нет — ждём токены этой колонки
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                                      <Box
-                                        sx={{
-                                          width: 6,
-                                          height: 6,
-                                          borderRadius: '50%',
-                                          bgcolor: 'primary.main',
-                                          animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                                          '@keyframes thinkingDot': {
-                                            '0%, 80%, 100%': { transform: 'scale(0)' },
-                                            '40%': { transform: 'scale(1)' },
-                                          },
-                                        }}
-                                      />
-                                      <Box
-                                        sx={{
-                                          width: 6,
-                                          height: 6,
-                                          borderRadius: '50%',
-                                          bgcolor: 'primary.main',
-                                          animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                                          animationDelay: '0.2s',
-                                          '@keyframes thinkingDot': {
-                                            '0%, 80%, 100%': { transform: 'scale(0)' },
-                                            '40%': { transform: 'scale(1)' },
-                                          },
-                                        }}
-                                      />
-                                      <Box
-                                        sx={{
-                                          width: 6,
-                                          height: 6,
-                                          borderRadius: '50%',
-                                          bgcolor: 'primary.main',
-                                          animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                                          animationDelay: '0.4s',
-                                          '@keyframes thinkingDot': {
-                                            '0%, 80%, 100%': { transform: 'scale(0)' },
-                                            '40%': { transform: 'scale(1)' },
-                                          },
-                                        }}
-                                      />
-                                    </Box>
-                                    <Typography variant="body2" sx={{ 
-                                      color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
-                                      fontSize: '0.875rem',
-                                    }}>
-                                      думает...
-                                    </Typography>
-                                  </Box>
-                                ) : idx === conversationHistory.length - 1 &&
-                                  multiLlmWaitingUi &&
-                                  window.selectedModel ? (
-                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                    Ожидание ответа… Первая загрузка весов в llm-svc может занять до минуты.
-                                  </Typography>
-                                ) : (
-                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                    Модель не отвечала
-                                  </Typography>
-                                )
-                              )}
-                            </CardContent>
-                          </Card>
-                        </Box>
-                      );
-                    })
-                  )}
-                  
-                  {/* Индикатор потоковой генерации - показываем только если нет ответа в истории */}
-                  {isStreaming && conversationHistory.length === 0 && (
-                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                        <Box
-                          sx={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: '50%',
-                            bgcolor: 'primary.main',
-                            animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                            '@keyframes thinkingDot': {
-                              '0%, 80%, 100%': { transform: 'scale(0)' },
-                              '40%': { transform: 'scale(1)' },
-                            },
-                          }}
-                        />
-                        <Box
-                          sx={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: '50%',
-                            bgcolor: 'primary.main',
-                            animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                            animationDelay: '0.2s',
-                            '@keyframes thinkingDot': {
-                              '0%, 80%, 100%': { transform: 'scale(0)' },
-                              '40%': { transform: 'scale(1)' },
-                            },
-                          }}
-                        />
-                        <Box
-                          sx={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: '50%',
-                            bgcolor: 'primary.main',
-                            animation: 'thinkingDot 1.4s ease-in-out infinite both',
-                            animationDelay: '0.4s',
-                            '@keyframes thinkingDot': {
-                              '0%, 80%, 100%': { transform: 'scale(0)' },
-                              '40%': { transform: 'scale(1)' },
-                            },
-                          }}
-                        />
-                      </Box>
-                      <Typography variant="body2" sx={{ 
-                        color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)',
-                        fontSize: '0.875rem',
-                      }}>
-                        думает...
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
-
-        {/* Панель управления моделями и ввода */}
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
-          <ChatInputBar
-            value={inputMessage}
-            onChange={setInputMessage}
-            onKeyPress={handleKeyPress}
-            onPaste={(e) => handlePaste(e as React.ClipboardEvent<HTMLDivElement>)}
-            placeholder={
-              !isConnected && !isConnecting
-                ? 'Нет соединения с сервером. Запустите backend на порту 8000'
-                : isConnecting
-                  ? 'Подключение к серверу...'
-                  : modelWindows.some(w => w.isStreaming)
-                    ? 'Модели генерируют ответ... Нажмите ⏹️ чтобы остановить'
-                    : !modelWindows.some(w => w.selectedModel)
-                      ? 'Выберите модель для начала диалога'
-                      : 'Чем я могу помочь вам сегодня?'
-            }
-            inputDisabled={!isConnected || !modelWindows.some(w => w.selectedModel) || modelWindows.some(w => w.isStreaming)}
-            inputRef={inputRef}
-            isDarkMode={isDarkMode}
-            solidWorkZoneBackground={workZoneAnimated}
-            maxWidth="1000px"
-            fileInputRef={fileInputRef}
-            onAttachClick={() => fileInputRef.current?.click()}
-            onFileSelect={(files) => { if (files?.length) handleFileUpload(files[0]); }}
-            uploadedFiles={uploadedFiles.map(f => ({ name: f.name, type: f.type || 'application/octet-stream' }))}
-            onFileRemove={(file) => handleFileDelete(file.name)}
-            isUploading={isUploading}
-            attachDisabled={isUploading || modelWindows.some(w => w.isStreaming)}
-            showReportButton={uploadedFiles.length > 0}
-            onReportClick={handleGenerateReport}
-            reportDisabled={isUploading || modelWindows.some(w => w.isStreaming)}
-            showStopButton={state.isLoading || modelWindows.some(w => w.isStreaming)}
-            onStopClick={handleStopGeneration}
-            onSendClick={handleSendMessage}
-            sendDisabled={!inputMessage.trim() || !isConnected || !modelWindows.some(w => w.selectedModel)}
-            styleVariant={interfaceSettings.chatInputStyle}
-            onSettingsClick={handleMenuOpen}
-            settingsDisabled={modelWindows.some(w => w.isStreaming)}
-            extraActions={
-              <>
-                {modelWindows.length < 4 && (
-                  <Tooltip title="Добавить модель">
-                    <IconButton
-                      onClick={addModelWindow}
+                endAdornment={
+                  <InputAdornment position="end">
+                    <ExpandMoreIcon
                       sx={{
-                        color: 'primary.main',
-                        bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                        border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'}`,
-                        '&:hover': {
-                          bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
-                        },
-                        '&:active': { transform: 'none' },
-                        flexShrink: 0,
+                        ...DROPDOWN_CHEVRON_SX,
+                        transform:
+                          multiLlmModelMenu?.windowId === window.id && Boolean(multiLlmModelMenu?.anchorEl)
+                            ? 'rotate(180deg)'
+                            : 'none',
                       }}
-                      disableRipple
-                      disabled={modelWindows.some(w => w.isStreaming)}
-                    >
-                      <AddIcon sx={{ fontSize: '1.2rem' }} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </>
-            }
-          />
-        </Box>
-        {/* Доп. действия (шестерёнка) — тот же стиль панели, что у селектора агента/модели и меню чата в проекте */}
+                    />
+                  </InputAdornment>
+                }
+              />
+            </FormControl>
+            {modelWindows.length > 1 ? (
+              <Tooltip title="Убрать колонку">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => removeModelWindow(window.id)}
+                    color="error"
+                    sx={{ flexShrink: 0 }}
+                    disabled={hasActiveChatStreaming}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            ) : null}
+          </Box>
+        ))}
         <Popover
-          open={Boolean(anchorEl)}
-          anchorEl={anchorEl}
-          onClose={handleMenuClose}
-          anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-          transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          open={menuOpen}
+          anchorEl={menuAnchor}
+          onClose={() => setMultiLlmModelMenu(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
           slotProps={{
             paper: {
               sx: {
-                mt: 0.5,
-                p: 0,
-                overflow: 'visible',
-                background: 'transparent !important',
-                backgroundColor: 'transparent !important',
-                boxShadow: 'none !important',
-                border: 'none',
+                ...dropdownPanelSx,
+                mt: DROPDOWN_PAPER_MARGIN_TOP,
+                minWidth: DROPDOWN_PAPER_MIN_WIDTH_PX,
+                width: menuAnchor
+                  ? `${menuAnchor.getBoundingClientRect().width}px`
+                  : DROPDOWN_PAPER_DEFAULT_WIDTH_PX,
               },
             },
           }}
         >
-          <Box sx={{ ...dropdownPanelSx, width: CHAT_GEAR_MENU_PANEL_WIDTH_PX, display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ py: 0.5, px: 0.5 }}>
-              <Box
-                onClick={() => {
-                  toggleKbRag();
-                  handleMenuClose();
-                }}
+          <Box sx={{ py: 0.5, maxHeight: 320, overflow: 'auto', ...SIDEBAR_HIDE_SCROLLBAR_SX }}>
+            {availableModels.length === 0 ? (
+              <Typography
                 sx={{
-                  ...dropdownItemSx,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  color: isDarkMode ? 'white' : '#333',
+                  px: 1.5,
+                  py: 1,
+                  fontSize: MENU_ACTION_TEXT_SIZE,
+                  color: isDarkMode ? 'rgba(255,255,255,0.45)' : 'text.secondary',
                 }}
               >
-                <KbIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
-                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>
-                  {useKbRag ? 'Отключить Базу Знаний' : 'Подключить Базу Знаний'}
-                </Typography>
-              </Box>
-              <Box
-                onClick={handleClearChat}
-                sx={{
-                  ...dropdownItemSx,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  color: isDarkMode ? 'white' : '#333',
-                }}
-              >
-                <ClearIcon sx={{ fontSize: 18, color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', flexShrink: 0 }} />
-                <Typography sx={{ flex: 1, minWidth: 0, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>Очистить чат</Typography>
-              </Box>
-            </Box>
+                Загрузка моделей...
+              </Typography>
+            ) : (
+              <>
+                <Box
+                  onClick={() => {
+                    if (menuWindowId) {
+                      handleModelSelect(menuWindowId, '');
+                      setMultiLlmModelMenu(null);
+                    }
+                  }}
+                  sx={{
+                    ...dropdownItemSx,
+                    color: !menuWin?.selectedModel ? (isDarkMode ? '#fff' : 'rgba(0,0,0,0.95)') : menuItemMuted,
+                    fontWeight: !menuWin?.selectedModel ? 600 : 400,
+                    bgcolor: !menuWin?.selectedModel ? selectedRowBg : 'transparent',
+                  }}
+                >
+                  Не выбрано
+                </Box>
+                {availableModels
+                  .filter((m) => {
+                    const k = availableModelSelectValue(m);
+                    const isSelectedElsewhere = modelWindows.some(
+                      (w) => w.id !== menuWindowId && w.selectedModel === k,
+                    );
+                    return !isSelectedElsewhere || menuWin?.selectedModel === k;
+                  })
+                  .map((model) => {
+                    const k = availableModelSelectValue(model);
+                    const sel = menuWin?.selectedModel === k;
+                    return (
+                      <Box
+                        key={k}
+                        onClick={() => {
+                          if (menuWindowId) {
+                            handleModelSelect(menuWindowId, k);
+                            setMultiLlmModelMenu(null);
+                          }
+                        }}
+                        sx={{
+                          ...dropdownItemSx,
+                          color: sel ? (isDarkMode ? '#fff' : 'rgba(0,0,0,0.95)') : menuItemMuted,
+                          fontWeight: sel ? 600 : 400,
+                          bgcolor: sel ? selectedRowBg : 'transparent',
+                        }}
+                      >
+                        {model.name}
+                      </Box>
+                    );
+                  })}
+              </>
+            )}
           </Box>
         </Popover>
+        {modelWindows.length < 4 ? (
+          <Tooltip title="Добавить модель (максимум 4)">
+            <span>
+              <IconButton
+                onClick={addModelWindow}
+                sx={{
+                  flexShrink: 0,
+                  width: 40,
+                  height: 40,
+                  borderRadius: '10px',
+                  color: 'primary.main',
+                  bgcolor: isDarkMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.9)',
+                  border: isDarkMode ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.12)',
+                  '&:hover': {
+                    bgcolor: isDarkMode ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,1)',
+                  },
+                }}
+                disableRipple
+                disabled={hasActiveChatStreaming}
+              >
+                <AddIcon sx={{ fontSize: '1.2rem' }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+        ) : null}
       </Box>
     );
-  }
+  };
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -2724,6 +2825,26 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
               onModelSelect={() => {}}
             />
           )}
+          {(modelSelectorMode === 'workspace' || modelSelectorMode === 'workspace_agent') && (
+            <Tooltip title="Сравнение моделей">
+              <span>
+                <IconButton
+                  onClick={() => {
+                    void handleToggleMultiLlmMode();
+                  }}
+                  disabled={
+                    !agentStatus?.is_initialized ||
+                    !isConnected ||
+                    state.isLoading ||
+                    hasActiveChatStreaming
+                  }
+                  sx={multiLlmModeToggleIconButtonSx}
+                >
+                  <MultiLlmModeToggleIcon isDarkMode={isDarkMode} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
         </Box>
       )}
       
@@ -2738,6 +2859,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
           transition: 'left 0.3s ease',
           display: 'flex',
           alignItems: 'center',
+          gap: 0.75,
         }}>
           {modelSelectorMode === 'workspace' && (
             <ModelSelector 
@@ -2753,6 +2875,26 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
               triggerMaxWidth={180}
               onModelSelect={() => {}}
             />
+          )}
+          {(modelSelectorMode === 'workspace' || modelSelectorMode === 'workspace_agent') && (
+            <Tooltip title="Сравнение моделей">
+              <span>
+                <IconButton
+                  onClick={() => {
+                    void handleToggleMultiLlmMode();
+                  }}
+                  disabled={
+                    !agentStatus?.is_initialized ||
+                    !isConnected ||
+                    state.isLoading ||
+                    hasActiveChatStreaming
+                  }
+                  sx={multiLlmModeToggleIconButtonSx}
+                >
+                  <MultiLlmModeToggleIcon isDarkMode={isDarkMode} />
+                </IconButton>
+              </span>
+            </Tooltip>
           )}
         </Box>
       )}
@@ -2857,7 +2999,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
               })}
               
               {/* Индикатор размышления - показывается только до начала потоковой генерации, сразу после сообщений */}
-              {state.isLoading && !messages.some(msg => msg.isStreaming) && (
+              {chatAwaitingTokens && (
                 <Box sx={{ 
                   width: '100%', 
                   display: 'flex',
@@ -3079,6 +3221,7 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                              {getGreeting()}
                            </Typography>
                          </Box>
+                         {renderMultiLlmModelToolbar()}
                          <ChatInputBar
                            value={inputMessage}
                            onChange={setInputMessage}
@@ -3089,13 +3232,17 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                                ? 'Нет соединения с сервером. Запустите backend на порту 8000'
                                : isConnecting
                                  ? 'Подключение к серверу...'
-                                 : state.isLoading && !messages.some(msg => msg.isStreaming)
-                                   ? 'astrachat думает...'
-                                   : state.isLoading && messages.some(msg => msg.isStreaming)
-                                     ? 'astrachat генерирует ответ... Нажмите ⏹️ чтобы остановить'
-                                     : 'Чем я могу помочь вам сегодня?'
+                                 : isMultiLlmMode && !multiLlmHasSelection
+                                   ? 'Выберите модели для сравнения (до 4, хотя бы одну)'
+                                   : chatAwaitingTokens
+                                     ? 'astrachat думает...'
+                                     : state.isLoading && hasActiveChatStreaming
+                                       ? isMultiLlmMode
+                                         ? 'Модели генерируют ответ... Нажмите ⏹️ чтобы остановить'
+                                         : 'astrachat генерирует ответ... Нажмите ⏹️ чтобы остановить'
+                                       : 'Чем я могу помочь вам сегодня?'
                            }
-                           inputDisabled={!isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           inputDisabled={!isConnected || multiLlmInputBlocked || chatAwaitingTokens}
                            inputRef={inputRef}
                            isDarkMode={isDarkMode}
                            solidWorkZoneBackground={workZoneAnimated}
@@ -3115,75 +3262,84 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                            uploadedFiles={uploadedFiles.map(f => ({ name: f.name, type: f.type || 'application/octet-stream' }))}
                            onFileRemove={(file) => handleFileDelete(file.name)}
                            isUploading={isUploading}
-                           attachDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           attachDisabled={isUploading || multiLlmInputBlocked || chatAwaitingTokens}
                            showReportButton={uploadedFiles.length > 0}
                            onReportClick={handleGenerateReport}
-                           reportDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           reportDisabled={isUploading || multiLlmInputBlocked || chatAwaitingTokens}
                            onSettingsClick={handleMenuOpen}
-                           settingsDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
-                           showStopButton={state.isLoading || messages.some(msg => msg.isStreaming)}
+                           settingsDisabled={multiLlmInputBlocked || chatAwaitingTokens}
+                           showStopButton={state.isLoading || hasActiveChatStreaming}
                            onStopClick={handleStopGeneration}
                            onSendClick={handleSendMessage}
-                           sendDisabled={!inputMessage.trim() || !isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
+                           sendDisabled={!inputMessage.trim() || !isConnected || multiLlmInputBlocked || chatAwaitingTokens}
                            onVoiceClick={() => setShowVoiceDialog(true)}
-                           voiceDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
+                           voiceDisabled={multiLlmInputBlocked || chatAwaitingTokens}
                            voiceTooltip="Голосовой ввод"
+                           extraActions={multiLlmSettingsExtraAction}
                          />
                        </Box>
                      ) : null}
 
                      {/* Объединенное поле ввода с кнопками (есть сообщения) */}
            {messages.length > 0 ? (
-           <ChatInputBar
-             value={inputMessage}
-             onChange={setInputMessage}
-             onKeyPress={handleKeyPress}
-             onPaste={(e) => handlePaste(e as React.ClipboardEvent<HTMLDivElement>)}
-             placeholder={
-               !isConnected && !isConnecting
-                 ? 'Нет соединения с сервером. Запустите backend на порту 8000'
-                 : isConnecting
-                   ? 'Подключение к серверу...'
-                   : state.isLoading && !messages.some(msg => msg.isStreaming)
-                     ? 'astrachat думает...'
-                     : state.isLoading && messages.some(msg => msg.isStreaming)
-                       ? 'astrachat генерирует ответ... Нажмите ⏹️ чтобы остановить'
-                       : 'Чем я могу помочь вам сегодня?'
-             }
-             inputDisabled={!isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
-             inputRef={inputRef}
-             isDarkMode={isDarkMode}
-             solidWorkZoneBackground={workZoneAnimated}
-             styleVariant={interfaceSettings.chatInputStyle}
-             containerSx={{
-               mt: 2,
-               p: interfaceSettings.chatInputStyle === 'classic' ? 0 : 1.5,
-               borderRadius: interfaceSettings.chatInputStyle === 'classic' ? '28px' : '28px',
-               maxWidth: interfaceSettings.widescreenMode ? '100%' : '1000px',
-               width: '100%',
-               mx: 'auto',
-               px: interfaceSettings.chatInputStyle === 'classic' ? 0 : (interfaceSettings.widescreenMode ? 4 : 2),
-             }}
-             fileInputRef={fileInputRef}
-             onAttachClick={() => fileInputRef.current?.click()}
-             onFileSelect={(files) => { if (files?.length) handleFileUpload(files[0]); }}
-             uploadedFiles={uploadedFiles.map(f => ({ name: f.name, type: f.type || 'application/octet-stream' }))}
-             onFileRemove={(file) => handleFileDelete(file.name)}
-             isUploading={isUploading}
-             attachDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
-             showReportButton={uploadedFiles.length > 0}
-             onReportClick={handleGenerateReport}
-             reportDisabled={isUploading || (state.isLoading && !messages.some(msg => msg.isStreaming))}
-             onSettingsClick={handleMenuOpen}
-             settingsDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
-             showStopButton={state.isLoading || messages.some(msg => msg.isStreaming)}
-             onStopClick={handleStopGeneration}
-             onSendClick={handleSendMessage}
-             sendDisabled={!inputMessage.trim() || !isConnected || (state.isLoading && !messages.some(msg => msg.isStreaming))}
-             onVoiceClick={() => setShowVoiceDialog(true)}
-             voiceDisabled={state.isLoading && !messages.some(msg => msg.isStreaming)}
-            voiceTooltip="Голосовой ввод"
-          />
+           <>
+             {renderMultiLlmModelToolbar()}
+             <ChatInputBar
+               value={inputMessage}
+               onChange={setInputMessage}
+               onKeyPress={handleKeyPress}
+               onPaste={(e) => handlePaste(e as React.ClipboardEvent<HTMLDivElement>)}
+               placeholder={
+                 !isConnected && !isConnecting
+                   ? 'Нет соединения с сервером. Запустите backend на порту 8000'
+                   : isConnecting
+                     ? 'Подключение к серверу...'
+                     : isMultiLlmMode && !multiLlmHasSelection
+                       ? 'Выберите модели для сравнения (до 4, хотя бы одну)'
+                       : chatAwaitingTokens
+                         ? 'astrachat думает...'
+                         : state.isLoading && hasActiveChatStreaming
+                           ? isMultiLlmMode
+                             ? 'Модели генерируют ответ... Нажмите ⏹️ чтобы остановить'
+                             : 'astrachat генерирует ответ... Нажмите ⏹️ чтобы остановить'
+                           : 'Чем я могу помочь вам сегодня?'
+               }
+               inputDisabled={!isConnected || multiLlmInputBlocked || chatAwaitingTokens}
+               inputRef={inputRef}
+               isDarkMode={isDarkMode}
+               solidWorkZoneBackground={workZoneAnimated}
+               styleVariant={interfaceSettings.chatInputStyle}
+               containerSx={{
+                 mt: 2,
+                 p: interfaceSettings.chatInputStyle === 'classic' ? 0 : 1.5,
+                 borderRadius: interfaceSettings.chatInputStyle === 'classic' ? '28px' : '28px',
+                 maxWidth: interfaceSettings.widescreenMode ? '100%' : '1000px',
+                 width: '100%',
+                 mx: 'auto',
+                 px: interfaceSettings.chatInputStyle === 'classic' ? 0 : (interfaceSettings.widescreenMode ? 4 : 2),
+               }}
+               fileInputRef={fileInputRef}
+               onAttachClick={() => fileInputRef.current?.click()}
+               onFileSelect={(files) => { if (files?.length) handleFileUpload(files[0]); }}
+               uploadedFiles={uploadedFiles.map(f => ({ name: f.name, type: f.type || 'application/octet-stream' }))}
+               onFileRemove={(file) => handleFileDelete(file.name)}
+               isUploading={isUploading}
+               attachDisabled={isUploading || multiLlmInputBlocked || chatAwaitingTokens}
+               showReportButton={uploadedFiles.length > 0}
+               onReportClick={handleGenerateReport}
+               reportDisabled={isUploading || multiLlmInputBlocked || chatAwaitingTokens}
+               onSettingsClick={handleMenuOpen}
+               settingsDisabled={multiLlmInputBlocked || chatAwaitingTokens}
+               showStopButton={state.isLoading || hasActiveChatStreaming}
+               onStopClick={handleStopGeneration}
+               onSendClick={handleSendMessage}
+               sendDisabled={!inputMessage.trim() || !isConnected || multiLlmInputBlocked || chatAwaitingTokens}
+               onVoiceClick={() => setShowVoiceDialog(true)}
+               voiceDisabled={multiLlmInputBlocked || chatAwaitingTokens}
+               voiceTooltip="Голосовой ввод"
+               extraActions={multiLlmSettingsExtraAction}
+             />
+           </>
            ) : null}
 
              {/* Диалоги */}
@@ -3265,7 +3421,9 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
          }}
        >
         <DialogTitle>
-          Редактировать сообщение
+          {editingMultiLlmSlotIndex !== null && editingMessage?.multiLLMResponses?.[editingMultiLlmSlotIndex]
+            ? `Редактировать ответ (${editingMessage.multiLLMResponses[editingMultiLlmSlotIndex]!.model})`
+            : 'Редактировать сообщение'}
         </DialogTitle>
         <DialogContent>
           <TextField
@@ -3333,16 +3491,28 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
             borderLeft: '1px solid rgba(255,255,255,0.08)',
             transition: 'width 0.3s ease',
             overflowX: 'hidden',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
+            ...SIDEBAR_HIDE_SCROLLBAR_SX,
           },
         }}
       >
         {/* Свёрнутое состояние: те же стили кнопок, что на левой панели; кнопка «Скрыть панель» — fixed по центру высоты экрана */}
         {!rightSidebarOpen && (
           <>
-            {/* Хедер с кнопкой-сэндвичем — зеркало левой панели (minHeight: 64) */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 64, p: 1 }}>
+            {/* Хедер — как у левой панели: px/py/minHeight */}
+            <Box
+              sx={{
+                px: 1,
+                py: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 64,
+                boxSizing: 'border-box',
+              }}
+            >
               <Tooltip title="Открыть панель" placement="left">
                 <IconButton
                   onClick={() => setRightSidebarOpen(true)}
@@ -3352,96 +3522,62 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                     width: 40,
                     height: 40,
                     borderRadius: 1,
+                    p: 0,
                     '&:hover': {
                       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                       opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
                     },
                   }}
                 >
-                  <MenuIcon />
+                  <SidebarRailMenuGlyph side="right" />
                 </IconButton>
               </Tooltip>
             </Box>
-            {/* Функциональные кнопки */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1, gap: 1 }}>
-              <Tooltip title="Транскрибация" placement="left">
-                <IconButton
-                  onClick={() => { setRightSidebarOpen(true); setTranscriptionMenuOpen(true); }}
-                  sx={{
-                    color: 'white',
-                    opacity: 1,
-                    width: 40,
-                    height: 40,
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                      opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
-                    },
-                  }}
-                >
-                  <TranscribeIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Галерея промптов" placement="left">
-                <IconButton
-                  onClick={() => navigate('/prompts')}
-                  sx={{
-                    color: 'white',
-                    opacity: 1,
-                    width: 40,
-                    height: 40,
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                      opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
-                    },
-                  }}
-                >
-                  <PromptsIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Конструктор агента" placement="left">
-                <IconButton
-                  onClick={() => { setRightSidebarOpen(true); setAgentConstructorOpen(true); }}
-                  sx={{
-                    color: 'white',
-                    opacity: 1,
-                    width: 40,
-                    height: 40,
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                      opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
-                    },
-                  }}
-                >
-                  <AgentConstructorIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Презентации" placement="left">
-                <IconButton
-                  onClick={() => navigate('/presentation')}
-                  sx={{
-                    color: 'white',
-                    opacity: 1,
-                    width: 40,
-                    height: 40,
-                    borderRadius: 1,
-                    '&:hover': {
-                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                      opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
-                    },
-                  }}
-                >
-                  <PresentationIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
+            {/* Узкая панель: List + ListItemButton как на левом сайдбаре */}
+            <List disablePadding sx={{ px: 1, pt: 0, pb: 1, width: '100%', boxSizing: 'border-box' }}>
+              <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                <Tooltip title="Транскрибация" placement="left">
+                  <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                    <ListItemButton
+                      onClick={() => {
+                        setRightSidebarOpen(true);
+                        setTranscriptionMenuOpen(true);
+                      }}
+                      sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                    >
+                      <SidebarRailTranscribeIcon sx={SIDEBAR_LIST_ICON_SX} />
+                    </ListItemButton>
+                  </Box>
+                </Tooltip>
+              </ListItem>
+              <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                <Tooltip title="Галерея промптов" placement="left">
+                  <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                    <ListItemButton
+                      onClick={() => navigate('/prompts')}
+                      sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                    >
+                      <SidebarRailPromptsIcon sx={SIDEBAR_LIST_ICON_SX} />
+                    </ListItemButton>
+                  </Box>
+                </Tooltip>
+              </ListItem>
+              <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                <Tooltip title="Конструктор агента" placement="left">
+                  <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                    <ListItemButton
+                      onClick={() => {
+                        setRightSidebarOpen(true);
+                        setAgentConstructorOpen(true);
+                      }}
+                      sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                    >
+                      <SidebarRailAgentIcon sx={SIDEBAR_LIST_ICON_SX} />
+                    </ListItemButton>
+                  </Box>
+                </Tooltip>
+              </ListItem>
+            </List>
             {/* Та же позиция и дизайн, что у кнопки «Скрыть панель» на левой панели: по центру высоты экрана */}
             <Box sx={{
               position: 'fixed',
@@ -3466,9 +3602,6 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                     '&:hover': {
                       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                       opacity: 1,
-                      '& .MuiSvgIcon-root': {
-                        color: 'primary.main',
-                      },
                     },
                   }}
                 >
@@ -3481,9 +3614,31 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
 
         {/* Развёрнутое состояние: кнопки всегда видны, меню конструктора открывается под кнопкой «Конструктор агента» */}
         {rightSidebarOpen && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', minHeight: 56, flexShrink: 0 }}>
-              <Tooltip title="Свернуть" placement="left">
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              overflow: 'hidden',
+              // Пока drawer анимирует ширину 64→240, вёрстка считалась бы по узкой полосе → подписи в 2 строки.
+              // Фиксируем минимальную ширину контента как у целевой панели; paper уже с overflowX: hidden.
+              minWidth: 240,
+              boxSizing: 'border-box',
+            }}
+          >
+            <Box
+              sx={{
+                px: 2,
+                py: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                minHeight: 64,
+                flexShrink: 0,
+                boxSizing: 'border-box',
+              }}
+            >
+              <Tooltip title="Свернуть панель" placement="left">
                 <IconButton
                   onClick={() => setRightSidebarOpen(false)}
                   sx={{
@@ -3496,11 +3651,10 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                     '&:hover': {
                       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                       opacity: 1,
-                      '& .MuiSvgIcon-root': { color: 'primary.main' },
                     },
                   }}
                 >
-                  <MenuIcon />
+                  <SidebarRailMenuGlyph side="right" />
                 </IconButton>
               </Tooltip>
             </Box>
@@ -3509,20 +3663,30 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                 <ListItemButton
                   onClick={() => setTranscriptionMenuOpen(prev => !prev)}
                   sx={{
-                    borderRadius: 2,
+                    ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                     color: 'white',
-                    py: 0,
-                    px: 2,
-                    minHeight: 36,
                     backgroundColor: transcriptionMenuOpen ? 'rgba(255,255,255,0.15)' : 'transparent',
-                    '&:hover': { backgroundColor: transcriptionMenuOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' },
-                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: transcriptionMenuOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                    },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                    <TranscribeIcon fontSize="small" />
+                  <ListItemIcon
+                    sx={{
+                      color: '#ffffff',
+                      minWidth: 40,
+                      mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                      '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                    }}
+                  >
+                    <SidebarRailTranscribeIcon />
                   </ListItemIcon>
-                  <ListItemText primary="Транскрибация" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                  <ListItemText
+                    primary="Транскрибация"
+                    primaryTypographyProps={{
+                      sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                    }}
+                  />
                 </ListItemButton>
               </ListItem>
               {/* Меню транскрибации — сразу под кнопкой «Транскрибация» */}
@@ -3651,58 +3815,59 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                 <ListItemButton
                   onClick={() => navigate('/prompts')}
                   sx={{
-                    borderRadius: 2,
+                    ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                     color: 'white',
-                    py: 0,
-                    px: 2,
-                    minHeight: 36,
-                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                    },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                    <PromptsIcon fontSize="small" />
+                  <ListItemIcon
+                    sx={{
+                      color: '#ffffff',
+                      minWidth: 40,
+                      mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                      '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                    }}
+                  >
+                    <SidebarRailPromptsIcon />
                   </ListItemIcon>
-                  <ListItemText primary="Галерея промптов" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                  <ListItemText
+                    primary="Галерея промптов"
+                    primaryTypographyProps={{
+                      sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                    }}
+                  />
                 </ListItemButton>
               </ListItem>
               <ListItem disablePadding sx={{ mb: 0.5 }}>
                 <ListItemButton
                   onClick={() => setAgentConstructorOpen(prev => !prev)}
                   sx={{
-                    borderRadius: 2,
+                    ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                     color: 'white',
-                    py: 0,
-                    px: 2,
-                    minHeight: 36,
                     backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.15)' : 'transparent',
-                    '&:hover': { backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' },
-                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                    },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                    <AgentConstructorIcon fontSize="small" />
+                  <ListItemIcon
+                    sx={{
+                      color: '#ffffff',
+                      minWidth: 40,
+                      mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                      '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                    }}
+                  >
+                    <SidebarRailAgentIcon />
                   </ListItemIcon>
-                  <ListItemText primary="Конструктор агента" primaryTypographyProps={{ fontSize: '0.875rem' }} />
-                </ListItemButton>
-              </ListItem>
-              <ListItem disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  onClick={() => navigate('/presentation')}
-                  sx={{
-                    borderRadius: 2,
-                    color: 'white',
-                    py: 0,
-                    px: 2,
-                    minHeight: 36,
-                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                    <PresentationIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Презентации" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                  <ListItemText
+                    primary="Конструктор агента"
+                    primaryTypographyProps={{
+                      sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                    }}
+                  />
                 </ListItemButton>
               </ListItem>
             </List>
@@ -3744,9 +3909,6 @@ export default function UnifiedChatPage({ isDarkMode, sidebarOpen = true }: Unif
                 '&:hover': {
                   bgcolor: 'transparent',
                   opacity: 1,
-                  '& .MuiSvgIcon-root': {
-                    color: 'primary.main',
-                  },
                 },
               }}
             >

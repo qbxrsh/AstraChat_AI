@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 
+/** Один столбец ответа в режиме multi-LLM (на карточке — свои кнопки и варианты перегенерации). */
+export interface MultiLLMResponseSlot {
+  model: string;
+  content: string;
+  isStreaming?: boolean;
+  error?: boolean;
+  alternativeResponses?: string[];
+  currentResponseIndex?: number;
+}
+
 // Типы данных
 export interface Message {
   id: string;
@@ -8,12 +18,7 @@ export interface Message {
   timestamp: string;
   isStreaming?: boolean;
   // Для режима multi-llm: несколько ответов от разных моделей
-  multiLLMResponses?: Array<{
-    model: string;
-    content: string;
-    isStreaming?: boolean;
-    error?: boolean;
-  }>;
+  multiLLMResponses?: MultiLLMResponseSlot[];
   // Для хранения нескольких вариантов ответов (при перегенерации)
   alternativeResponses?: string[];
   currentResponseIndex?: number; // Индекс текущего отображаемого варианта (0-based)

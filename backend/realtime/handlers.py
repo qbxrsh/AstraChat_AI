@@ -138,6 +138,11 @@ def register_handlers(sio):
                 and len(agent_kb_doc_ids) > 0
             )
 
+            orchestrator_early = get_agent_orchestrator()
+            use_multi_llm_early = orchestrator_early and orchestrator_early.get_mode() == "multi-llm"
+            multi_slot_regen = str(data.get("multi_llm_slot_regenerate") or "").strip()
+            skip_user_save = bool(data.get("regenerate")) and use_multi_llm_early and bool(multi_slot_regen)
+
             if conversation_id:
                 import backend.database.memory_service as mem_mod
                 mem_mod.current_conversation_id = conversation_id
@@ -167,20 +172,22 @@ def register_handlers(sio):
                     max_entries=state.memory_max_messages, conversation_id=conversation_id
                 )
 
-            # Сохраняем сообщение пользователя (с привязкой к проекту, если нужно)
-            try:
-                if project_id:
-                    from backend.database.memory_service import save_dialog_entry_to_project
-                    await save_dialog_entry_to_project(
-                        "user", user_message, project_id, conversation_id, user_message_id
-                    )
-                else:
-                    await save_dialog_entry("user", user_message, None, user_message_id, conversation_id)
-            except RuntimeError as e:
-                if "MongoDB" in str(e):
-                    await sio.emit("chat_error", {"error": "MongoDB недоступен."}, room=sid)
-                    return
-                raise
+            # Сохраняем сообщение пользователя (с привязкой к проекту, если нужно).
+            # Перегенерация одного столбца multi-LLM — без дубля user в истории.
+            if not skip_user_save:
+                try:
+                    if project_id:
+                        from backend.database.memory_service import save_dialog_entry_to_project
+                        await save_dialog_entry_to_project(
+                            "user", user_message, project_id, conversation_id, user_message_id
+                        )
+                    else:
+                        await save_dialog_entry("user", user_message, None, user_message_id, conversation_id)
+                except RuntimeError as e:
+                    if "MongoDB" in str(e):
+                        await sio.emit("chat_error", {"error": "MongoDB недоступен."}, room=sid)
+                        return
+                    raise
 
             orchestrator = get_agent_orchestrator()
             use_agent_mode = orchestrator and orchestrator.get_mode() == "agent"
@@ -218,6 +225,8 @@ def register_handlers(sio):
 
             # -- MULTI-LLM mode
             if use_multi_llm_mode:
+                slot = str(data.get("multi_llm_slot_regenerate") or "").strip()
+                models_subset = [slot] if (bool(data.get("regenerate")) and slot) else None
                 await _handle_multi_llm(
                     sio, sid, data, user_message, streaming, conversation_id,
                     use_kb_rag, use_memory_library_rag, loop,
@@ -225,6 +234,7 @@ def register_handlers(sio):
                     project_id=project_id,
                     project_instructions=project_instructions,
                     rag_strategy=effective_rag_strategy,
+                    models_subset=models_subset,
                 )
                 return
 
@@ -272,12 +282,23 @@ async def _handle_multi_llm(
     project_id=None,
     project_instructions=None,
     rag_strategy="auto",
+    models_subset=None,
 ):
     orchestrator = get_agent_orchestrator()
     multi_llm_models = orchestrator.get_multi_llm_models()
     if not multi_llm_models:
         await sio.emit("chat_error", {"error": "Модели не выбраны"}, room=sid)
         return
+    if models_subset is not None:
+        allowed = set(multi_llm_models)
+        multi_llm_models = [m for m in models_subset if m in allowed]
+        if not multi_llm_models:
+            await sio.emit(
+                "chat_error",
+                {"error": "Указанная модель не входит в список multi-LLM"},
+                room=sid,
+            )
+            return
 
     _terminal_chat_inference_banner(
         sid=sid, conversation_id=conversation_id, user_preview=user_message,
