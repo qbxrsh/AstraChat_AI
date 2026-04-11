@@ -54,7 +54,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   Close as CloseIcon,
   FilterList as FilterListIcon,
-  Menu as MenuIcon,
   ChevronRight as ChevronRightIcon,
   SmartToy as AgentIcon,
   AutoAwesome as PromptIcon,
@@ -63,6 +62,7 @@ import {
 import { getApiUrl, API_ENDPOINTS } from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
+import SidebarRailMenuGlyph from '../components/SidebarRailMenuGlyph';
 import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 
@@ -1261,7 +1261,7 @@ export default function PromptGalleryPage() {
               },
             }}
           >
-            <MenuIcon />
+            <SidebarRailMenuGlyph side="right" />
           </IconButton>
         </Box>
 
@@ -1291,9 +1291,6 @@ export default function PromptGalleryPage() {
                     ? 'rgba(255,255,255,0.3)' 
                     : (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
                   opacity: 1,
-                  '& .MuiSvgIcon-root': !rightSidebarOpen ? {
-                    color: 'primary.main',
-                  } : {},
                 },
                 textTransform: 'none',
                 py: rightSidebarOpen ? 1.5 : 1,
@@ -1332,9 +1329,6 @@ export default function PromptGalleryPage() {
                       : (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
                     borderColor: rightSidebarOpen ? 'rgba(255,255,255,0.5)' : 'transparent',
                     opacity: 1,
-                    '& .MuiSvgIcon-root': !rightSidebarOpen ? {
-                      color: 'primary.main',
-                    } : {},
                   },
                   textTransform: 'none',
                   py: rightSidebarOpen ? 1.5 : 1,
@@ -1373,9 +1367,6 @@ export default function PromptGalleryPage() {
                     : (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
                   borderColor: rightSidebarOpen ? 'rgba(255,255,255,0.5)' : 'transparent',
                   opacity: 1,
-                  '& .MuiSvgIcon-root': !rightSidebarOpen ? {
-                    color: 'primary.main',
-                  } : {},
                 },
                 textTransform: 'none',
                 py: rightSidebarOpen ? 1.5 : 1,
@@ -1443,9 +1434,6 @@ export default function PromptGalleryPage() {
                   '&:hover': {
                     backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                     opacity: 1,
-                    '& .MuiSvgIcon-root': {
-                      color: 'primary.main',
-                    },
                   },
                 }}
               >
@@ -1484,7 +1472,6 @@ export default function PromptGalleryPage() {
                 boxShadow: 'none',
                 '&:hover': {
                   bgcolor: 'transparent',
-                  '& .MuiSvgIcon-root': { color: 'primary.main' },
                 },
               }}
             >

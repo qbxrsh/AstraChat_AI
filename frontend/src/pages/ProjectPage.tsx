@@ -32,7 +32,6 @@ import {
   EditOutlined as EditIcon,
   DeleteOutlined as DeleteIcon,
   MoreVert as MoreVertIcon,
-  Add as AddIcon,
   FolderOutlined as FolderIcon,
   AttachMoney as MoneyIcon,
   Lightbulb as LightbulbIcon,
@@ -63,7 +62,6 @@ import {
   Luggage as LuggageIcon,
   ExpandMore as ExpandMoreIcon,
   Send as SendIcon,
-  Search as SearchIcon,
   Mic as MicIcon,
   AttachFile as AttachFileIcon,
   School as SchoolIcon,
@@ -74,10 +72,7 @@ import {
   Refresh as RefreshIcon,
   Clear as ClearIcon,
   AutoStories as KbIcon,
-  Transcribe as TranscribeIcon,
-  SmartToy as AgentConstructorIcon,
   ChevronRight as ChevronRightIcon,
-  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useAppContext, useAppActions, chatIsListedInAllChatsSection } from '../contexts/AppContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -85,7 +80,24 @@ import VoiceChatDialog from '../components/VoiceChatDialog';
 import ChatInputBar from '../components/ChatInputBar';
 import { useTheme } from '@mui/material/styles';
 import AgentConstructorPanel from '../components/AgentConstructorPanel';
-import { getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, CHAT_GEAR_MENU_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
+import {
+  getProjectIconGlyphSx,
+  getDropdownItemSx,
+  MENU_ACTION_TEXT_SIZE,
+  MENU_COMPACT_PANEL_WIDTH_PX,
+  CHAT_GEAR_MENU_PANEL_WIDTH_PX,
+  getDropdownPanelSx,
+  SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+  SIDEBAR_LIST_ICON_SX,
+  SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX,
+  getSidebarRailCollapsedListItemButtonSx,
+} from '../constants/menuStyles';
+import SidebarRailMenuGlyph from '../components/SidebarRailMenuGlyph';
+import {
+  SidebarRailTranscribeIcon,
+  SidebarRailPromptsIcon,
+  SidebarRailAgentIcon,
+} from '../constants/sidebarRailIcons';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
 import { getWorkZoneBackgroundColor, isWorkZoneAnimatedMode } from '../constants/workZoneBackground';
 import { useWorkZoneBgMode } from '../hooks/useWorkZoneBgMode';
@@ -968,8 +980,17 @@ export default function ProjectPage() {
         >
           {!rightSidebarOpen && (
             <>
-              {/* Хедер с кнопкой-сэндвичем — зеркало левой панели (minHeight: 64) */}
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 64, p: 1 }}>
+              <Box
+                sx={{
+                  px: 1,
+                  py: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 64,
+                  boxSizing: 'border-box',
+                }}
+              >
                 <Tooltip title="Открыть панель" placement="left">
                   <IconButton
                     onClick={() => setRightSidebarOpen(true)}
@@ -979,82 +1000,58 @@ export default function ProjectPage() {
                       width: 40,
                       height: 40,
                       borderRadius: 1,
+                      p: 0,
                       '&:hover': {
                         backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                         opacity: 1,
-                        '& .MuiSvgIcon-root': { color: 'primary.main' },
                       },
                     }}
                   >
-                    <MenuIcon />
+                    <SidebarRailMenuGlyph side="right" />
                   </IconButton>
                 </Tooltip>
               </Box>
-              {/* Функциональные кнопки */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1, gap: 1 }}>
-                <Tooltip title="Транскрибация" placement="left">
-                  <IconButton
-                    onClick={() => setTranscriptionModalOpen(true)}
-                    sx={{
-                      color: 'white',
-                      opacity: 1,
-                      width: 40,
-                      height: 40,
-                      borderRadius: 1,
-                      '&:hover': {
-                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                        opacity: 1,
-                        '& .MuiSvgIcon-root': { color: 'primary.main' },
-                      },
-                    }}
-                  >
-                    <TranscribeIcon />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Галерея промптов" placement="left">
-                  <IconButton
-                    onClick={() => navigate('/prompts')}
-                    sx={{
-                      color: 'white',
-                      opacity: 1,
-                      width: 40,
-                      height: 40,
-                      borderRadius: 1,
-                      '&:hover': {
-                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                        opacity: 1,
-                        '& .MuiSvgIcon-root': { color: 'primary.main' },
-                      },
-                    }}
-                  >
-                    <SparkleIcon />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Конструктор агента" placement="left">
-                  <IconButton
-                    onClick={() => {
-                      setRightSidebarOpen(true);
-                      setAgentConstructorOpen(true);
-                    }}
-                    sx={{
-                      color: 'white',
-                      opacity: 1,
-                      width: 40,
-                      height: 40,
-                      borderRadius: 1,
-                      '&:hover': {
-                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                        opacity: 1,
-                        '& .MuiSvgIcon-root': { color: 'primary.main' },
-                      },
-                    }}
-                  >
-                    <AgentConstructorIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
+              <List disablePadding sx={{ px: 1, pt: 0, pb: 1, width: '100%', boxSizing: 'border-box' }}>
+                <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                  <Tooltip title="Транскрибация" placement="left">
+                    <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                      <ListItemButton
+                        onClick={() => setTranscriptionModalOpen(true)}
+                        sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                      >
+                        <SidebarRailTranscribeIcon sx={SIDEBAR_LIST_ICON_SX} />
+                      </ListItemButton>
+                    </Box>
+                  </Tooltip>
+                </ListItem>
+                <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                  <Tooltip title="Галерея промптов" placement="left">
+                    <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                      <ListItemButton
+                        onClick={() => navigate('/prompts')}
+                        sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                      >
+                        <SidebarRailPromptsIcon sx={SIDEBAR_LIST_ICON_SX} />
+                      </ListItemButton>
+                    </Box>
+                  </Tooltip>
+                </ListItem>
+                <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+                  <Tooltip title="Конструктор агента" placement="left">
+                    <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                      <ListItemButton
+                        onClick={() => {
+                          setRightSidebarOpen(true);
+                          setAgentConstructorOpen(true);
+                        }}
+                        sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                      >
+                        <SidebarRailAgentIcon sx={SIDEBAR_LIST_ICON_SX} />
+                      </ListItemButton>
+                    </Box>
+                  </Tooltip>
+                </ListItem>
+              </List>
 
               <Box
                 sx={{
@@ -1081,9 +1078,6 @@ export default function ProjectPage() {
                       '&:hover': {
                         backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                         opacity: 1,
-                        '& .MuiSvgIcon-root': {
-                          color: 'primary.main',
-                        },
                       },
                     }}
                   >
@@ -1095,7 +1089,17 @@ export default function ProjectPage() {
           )}
 
           {rightSidebarOpen && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                overflow: 'hidden',
+                // См. UnifiedChatPage: при анимации ширины drawer подписи не должны пересчитываться по узкой полосе.
+                minWidth: 240,
+                boxSizing: 'border-box',
+              }}
+            >
               <Box
                 sx={{
                   px: 2,
@@ -1103,11 +1107,12 @@ export default function ProjectPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'flex-start',
-                  minHeight: 56,
+                  minHeight: 64,
                   flexShrink: 0,
+                  boxSizing: 'border-box',
                 }}
               >
-                <Tooltip title="Свернуть" placement="left">
+                <Tooltip title="Свернуть панель" placement="left">
                   <IconButton
                     onClick={() => setRightSidebarOpen(false)}
                     sx={{
@@ -1120,11 +1125,10 @@ export default function ProjectPage() {
                       '&:hover': {
                         backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                         opacity: 1,
-                        '& .MuiSvgIcon-root': { color: 'primary.main' },
                       },
                     }}
                   >
-                    <MenuIcon />
+                    <SidebarRailMenuGlyph side="right" />
                   </IconButton>
                 </Tooltip>
               </Box>
@@ -1134,20 +1138,30 @@ export default function ProjectPage() {
                   <ListItemButton
                     onClick={() => setTranscriptionModalOpen(true)}
                     sx={{
-                      borderRadius: 2,
+                      ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                       color: 'white',
-                    py: 0,
-                      px: 2,
-                    minHeight: 36,
                       backgroundColor: transcriptionModalOpen ? 'rgba(255,255,255,0.15)' : 'transparent',
-                      '&:hover': { backgroundColor: transcriptionModalOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' },
-                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: transcriptionModalOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                      },
                     }}
                   >
-                    <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                      <TranscribeIcon fontSize="small" />
+                    <ListItemIcon
+                      sx={{
+                        color: '#ffffff',
+                        minWidth: 40,
+                        mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                        '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                      }}
+                    >
+                      <SidebarRailTranscribeIcon />
                     </ListItemIcon>
-                    <ListItemText primary="Транскрибация" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                    <ListItemText
+                      primary="Транскрибация"
+                      primaryTypographyProps={{
+                        sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                      }}
+                    />
                   </ListItemButton>
                 </ListItem>
 
@@ -1155,19 +1169,29 @@ export default function ProjectPage() {
                   <ListItemButton
                     onClick={() => navigate('/prompts')}
                     sx={{
-                      borderRadius: 2,
+                      ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                       color: 'white',
-                    py: 0,
-                      px: 2,
-                    minHeight: 36,
-                      '&:hover': { backgroundColor: 'rgba(255,255,255,0.08)' },
-                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255,255,255,0.08)',
+                      },
                     }}
                   >
-                    <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                      <SparkleIcon fontSize="small" />
+                    <ListItemIcon
+                      sx={{
+                        color: '#ffffff',
+                        minWidth: 40,
+                        mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                        '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                      }}
+                    >
+                      <SidebarRailPromptsIcon />
                     </ListItemIcon>
-                    <ListItemText primary="Галерея промптов" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                    <ListItemText
+                      primary="Галерея промптов"
+                      primaryTypographyProps={{
+                        sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                      }}
+                    />
                   </ListItemButton>
                 </ListItem>
 
@@ -1175,20 +1199,30 @@ export default function ProjectPage() {
                   <ListItemButton
                     onClick={() => setAgentConstructorOpen((prev) => !prev)}
                     sx={{
-                      borderRadius: 2,
+                      ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
                       color: 'white',
-                    py: 0,
-                      px: 2,
-                    minHeight: 36,
                       backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.15)' : 'transparent',
-                      '&:hover': { backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' },
-                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: agentConstructorOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+                      },
                     }}
                   >
-                    <ListItemIcon sx={{ color: 'white', minWidth: 36, mr: 1 }}>
-                      <AgentConstructorIcon fontSize="small" />
+                    <ListItemIcon
+                      sx={{
+                        color: '#ffffff',
+                        minWidth: 40,
+                        mr: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+                        '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                      }}
+                    >
+                      <SidebarRailAgentIcon />
                     </ListItemIcon>
-                    <ListItemText primary="Конструктор агента" primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                    <ListItemText
+                      primary="Конструктор агента"
+                      primaryTypographyProps={{
+                        sx: { fontSize: '0.8rem', fontWeight: 400, color: '#ffffff' },
+                      }}
+                    />
                   </ListItemButton>
                 </ListItem>
               </List>
@@ -1238,9 +1272,6 @@ export default function ProjectPage() {
                 '&:hover': {
                   bgcolor: 'transparent',
                   opacity: 1,
-                  '& .MuiSvgIcon-root': {
-                    color: 'primary.main',
-                  },
                 },
               }}
             >

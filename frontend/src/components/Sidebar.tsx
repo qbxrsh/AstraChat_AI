@@ -27,15 +27,12 @@ import {
   ChatOutlined as ChatIcon,
   SettingsOutlined as SettingsIcon,
   InfoOutlined as InfoIcon,
-  Add as AddIcon,
   DeleteOutlined as DeleteIcon,
   EditOutlined as EditIcon,
   MoreVert as MoreVertIcon,
   ExpandMore as ExpandMoreIcon,
-  Search as SearchIcon,
   FolderOutlined as FolderIcon,
   CreateNewFolderOutlined as AddFolderIcon,
-  Menu as MenuIcon,
   LogoutOutlined as LogoutIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
@@ -79,9 +76,28 @@ import { useAuth } from '../contexts/AuthContext';
 import ArchiveModal from './ArchiveModal';
 import NewProjectModal from './NewProjectModal';
 import EditProjectModal from './EditProjectModal';
-import { MENU_BORDER_RADIUS_PX, getMenuColors, SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX, SIDEBAR_PROJECT_AVATAR_SIZE, getProjectIconGlyphSx, getDropdownItemSx, MENU_ACTION_TEXT_SIZE, MENU_COMPACT_PANEL_WIDTH_PX, getDropdownPanelSx } from '../constants/menuStyles';
+import SidebarRailMenuGlyph from './SidebarRailMenuGlyph';
+import {
+  MENU_BORDER_RADIUS_PX,
+  getMenuColors,
+  SIDEBAR_PROJECT_AVATAR_SIZE,
+  getProjectIconGlyphSx,
+  getDropdownItemSx,
+  MENU_ACTION_TEXT_SIZE,
+  MENU_COMPACT_PANEL_WIDTH_PX,
+  getDropdownPanelSx,
+  SIDEBAR_CONTROL_HEIGHT_PX,
+  SIDEBAR_CONTROL_RADIUS,
+  SIDEBAR_CONTROL_PX,
+  SIDEBAR_ICON_LEADING_PL,
+  SIDEBAR_LIST_LEADING_ICON_SX,
+  SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+  SIDEBAR_LIST_ICON_SX,
+  getSidebarRailCollapsedListItemButtonSx,
+} from '../constants/menuStyles';
 import { getSidebarPanelBackground } from '../constants/sidebarPanelColor';
 import { hotkeyLabel, ASTRA_REQUEST_DELETE_CURRENT_CHAT, ASTRA_OPEN_SETTINGS } from '../constants/hotkeys';
+import { SidebarRailAddIcon, SidebarRailSearchIcon } from '../constants/sidebarRailIcons';
 
 interface SidebarProps {
   open: boolean;
@@ -94,9 +110,34 @@ interface SidebarProps {
 }
 
 const menuItems: any[] = [];
-const SIDEBAR_CONTROL_HEIGHT_PX = 36;
-const SIDEBAR_CONTROL_RADIUS = 2;
-const SIDEBAR_CONTROL_PX = 2;
+
+const SIDEBAR_SECTION_CHEVRON_SX = {
+  fontSize: '1.25rem',
+  color: '#ffffff',
+  opacity: 0.9,
+} as const;
+
+/** Строка заголовка секции («Проекты», «Все чаты», папка): те же высота и поля, что у «Все чаты». */
+const SIDEBAR_SECTION_HEADER_ROW_SX = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  px: SIDEBAR_CONTROL_PX,
+  py: 0,
+  minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+  borderRadius: SIDEBAR_CONTROL_RADIUS,
+  '&:hover': {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  transition: 'background-color 0.2s ease',
+} as const;
+
+const SIDEBAR_SECTION_HEADER_TITLE_SX = {
+  opacity: 0.8,
+  fontSize: '0.75rem',
+  lineHeight: 1.25,
+  fontWeight: 500,
+} as const;
 
 // Маппинг иконок для проектов
 const projectIconMap: Record<string, React.ComponentType<any>> = {
@@ -244,8 +285,8 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
   const { menuBg, menuBorder, menuItemColor, menuItemHover, menuDividerBorder, menuDisabledColor } = getMenuColors(isDarkMode);
   const dropdownPanelSx = getDropdownPanelSx(isDarkMode);
   const dropdownItemSx = React.useMemo(() => getDropdownItemSx(isDarkMode), [isDarkMode]);
-  const submenuIconColor = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-  const submenuChevronColor = isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const submenuIconColor = isDarkMode ? '#ffffff' : 'rgba(0,0,0,0.6)';
+  const submenuChevronColor = isDarkMode ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.45)';
 
   // Получаем проекты
   const projects = getProjects();
@@ -741,20 +782,23 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
       {/* Заголовок */}
       <Box
         sx={{
-          p: open ? 2 : 1,
+          // Одинаковая вертикальная сетка в широком и узком режиме — без «прыжка» при сворачивании
+          px: open ? 2 : 1,
+          py: 1.5,
           display: 'flex',
           alignItems: 'center',
           justifyContent: open ? 'space-between' : 'center',
           background: 'transparent',
           minHeight: 64,
+          boxSizing: 'border-box',
         }}
       >
         {open && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Box
               sx={{
-                width: 48,
-                height: 48,
+                width: 38,
+                height: 38,
                 borderRadius: '50%',
                 overflow: 'hidden',
                 display: 'flex',
@@ -795,229 +839,223 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               '&:hover': {
                 backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                 opacity: 1,
-                '& .MuiSvgIcon-root': { color: 'primary.main' },
               },
             }}
           >
-            <MenuIcon />
+            <SidebarRailMenuGlyph side="left" />
           </IconButton>
         </Tooltip>
       </Box>
 
       {open && (
         <>
-          {/* Кнопка создания нового чата */}
-          <Box sx={{ p: 1.5 }}>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreateChat}
-              onMouseEnter={() => setNewChatShortcutHover(true)}
-              onMouseLeave={() => setNewChatShortcutHover(false)}
-              sx={{
-                position: 'relative',
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                color: 'white',
-                '&:hover': {
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                },
-                textTransform: 'none',
-                fontWeight: 500,
-                py: 0,
-                pr: 1,
-                px: SIDEBAR_CONTROL_PX,
-                borderRadius: SIDEBAR_CONTROL_RADIUS,
-                justifyContent: 'flex-start',
-                fontSize: MENU_ACTION_TEXT_SIZE,
-                minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
-              }}
-            >
-              Новый чат
-              <Typography
-                component="span"
+          {/* «Новый чат» и «Поиск» — те же ListItem + ListItemButton, отступы и mb, что у строк чатов */}
+          <List disablePadding sx={{ px: 1, pt: 0, pb: 0 }}>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                onClick={handleCreateChat}
+                onMouseEnter={() => setNewChatShortcutHover(true)}
+                onMouseLeave={() => setNewChatShortcutHover(false)}
                 sx={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.85)',
-                  opacity: newChatShortcutHover ? 0.65 : 0,
-                  transition: 'opacity 0.12s ease',
-                  pointerEvents: 'none',
-                  whiteSpace: 'nowrap',
-                  letterSpacing: '0.02em',
+                  ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+                  pl: SIDEBAR_ICON_LEADING_PL,
+                  pr: SIDEBAR_CONTROL_PX,
+                  position: 'relative',
+                  alignItems: 'center',
                 }}
               >
-                {hotkeyLabel.newChat()}
-              </Typography>
-            </Button>
-          </Box>
-
-          {/* Поиск в чатах */}
-          <Box
-            sx={{ p: 1.5 }}
-            onMouseEnter={() => setSearchFieldHover(true)}
-            onMouseLeave={() => setSearchFieldHover(false)}
-          >
-            <TextField
-              inputRef={searchInputRef}
-              fullWidth
-              placeholder="Поиск в чатах"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              size="small"
-              InputProps={{
-                startAdornment: <SearchIcon sx={{ color: 'rgba(255,255,255,0.7)', mr: 1, fontSize: '1rem' }} />,
-                endAdornment: (
-                  <InputAdornment position="end" sx={{ maxHeight: 'none', mr: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <Typography
-                        component="span"
-                        sx={{
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                          color: 'rgba(255,255,255,0.85)',
-                          opacity: searchFieldHover ? 0.65 : 0,
-                          maxWidth: searchFieldHover ? 120 : 0,
-                          overflow: 'hidden',
-                          transition: 'opacity 0.12s ease, max-width 0.15s ease',
-                          pointerEvents: 'none',
-                          whiteSpace: 'nowrap',
-                          letterSpacing: '0.02em',
-                        }}
-                      >
-                        {hotkeyLabel.searchChats()}
-                      </Typography>
-                      {useFoldersMode ? (
-                        <Tooltip title="Создать папку">
-                          <IconButton
-                            size="small"
-                            onClick={() => setShowCreateFolderDialog(true)}
-                            sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                <ListItemIcon sx={SIDEBAR_LIST_LEADING_ICON_SX}>
+                  <SidebarRailAddIcon sx={SIDEBAR_LIST_ICON_SX} />
+                </ListItemIcon>
+                <ListItemText
+                  sx={{ flex: 1, minWidth: 0, my: 0, pr: 5 }}
+                  primary={
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: 'white',
+                        fontWeight: 400,
+                        fontSize: '0.8rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Новый чат
+                    </Typography>
+                  }
+                />
+                <Typography
+                  component="span"
+                  sx={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.85)',
+                    opacity: newChatShortcutHover ? 0.65 : 0,
+                    transition: 'opacity 0.12s ease',
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {hotkeyLabel.newChat()}
+                </Typography>
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton
+                component="div"
+                onMouseEnter={() => setSearchFieldHover(true)}
+                onMouseLeave={() => setSearchFieldHover(false)}
+                sx={{
+                  ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+                  pl: SIDEBAR_ICON_LEADING_PL,
+                  pr: SIDEBAR_CONTROL_PX,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  cursor: 'text',
+                }}
+              >
+                <ListItemIcon sx={SIDEBAR_LIST_LEADING_ICON_SX}>
+                  <SidebarRailSearchIcon sx={SIDEBAR_LIST_ICON_SX} />
+                </ListItemIcon>
+                <TextField
+                  inputRef={searchInputRef}
+                  fullWidth
+                  placeholder="Поиск в чатах"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  variant="standard"
+                  size="small"
+                  InputProps={{
+                    disableUnderline: true,
+                    endAdornment: (
+                      <InputAdornment position="end" sx={{ maxHeight: 'none', mr: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              color: 'rgba(255,255,255,0.85)',
+                              opacity: searchFieldHover ? 0.65 : 0,
+                              maxWidth: searchFieldHover ? 120 : 0,
+                              overflow: 'hidden',
+                              transition: 'opacity 0.12s ease, max-width 0.15s ease',
+                              pointerEvents: 'none',
+                              whiteSpace: 'nowrap',
+                              letterSpacing: '0.02em',
+                            }}
                           >
-                            <AddFolderIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      ) : null}
-                    </Box>
-                  </InputAdornment>
-                ),
-                sx: {
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: SIDEBAR_CONTROL_RADIUS,
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    border: 'none',
-                  },
-                  '& .MuiInputBase-input': {
-                    color: 'white',
-                    fontSize: MENU_ACTION_TEXT_SIZE,
-                    '&::placeholder': {
-                      color: 'rgba(255,255,255,0.7)',
-                      opacity: 1,
+                            {hotkeyLabel.searchChats()}
+                          </Typography>
+                          {useFoldersMode ? (
+                            <Tooltip title="Создать папку">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowCreateFolderDialog(true);
+                                }}
+                                sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
+                              >
+                                <AddFolderIcon />
+                              </IconButton>
+                            </Tooltip>
+                          ) : null}
+                        </Box>
+                      </InputAdornment>
+                    ),
+                    sx: {
+                      color: 'white',
+                      fontSize: '0.8rem',
+                      '& .MuiInputBase-input': {
+                        color: 'white',
+                        fontSize: '0.8rem',
+                        py: 0.25,
+                        '&::placeholder': {
+                          color: 'rgba(255,255,255,0.7)',
+                          opacity: 1,
+                        },
+                      },
                     },
-                  },
-                },
-              }}
-            />
-          </Box>
+                  }}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    m: 0,
+                    '& .MuiInputBase-root': {
+                      mt: 0,
+                    },
+                  }}
+                />
+              </ListItemButton>
+            </ListItem>
+          </List>
         </>
       )}
 
-      {/* Кнопки в свернутом состоянии */}
+      {/* Кнопки в свернутом состоянии — те же ListItem + ListItemButton, что у строк чатов */}
       {!open && (
         <>
-          <Box sx={{ 
-            p: 1, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center',
-            gap: 1,
-          }}>
-            {/* Кнопка нового чата — первая, как в раскрытом режиме */}
-            <Tooltip
-              placement="right"
-              title={
-                <Box>
-                  <Typography variant="body2" component="span" display="block">
-                    Новый чат
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
-                    {hotkeyLabel.newChat()}
-                  </Typography>
-                </Box>
-              }
-            >
-              <IconButton
-                onClick={handleCreateChat}
-                sx={{
-                  color: 'white',
-                  opacity: 1,
-                  width: 40,
-                  height: 40,
-                  borderRadius: 1,
-                  '&:hover': {
-                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                    opacity: 1,
-                    '& .MuiSvgIcon-root': {
-                      color: 'primary.main',
-                    },
-                  },
-                }}
+          <List disablePadding sx={{ px: 1, pt: 0, pb: 1, width: '100%', boxSizing: 'border-box' }}>
+            <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+              <Tooltip
+                placement="right"
+                title={
+                  <Box>
+                    <Typography variant="body2" component="span" display="block">
+                      Новый чат
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
+                      {hotkeyLabel.newChat()}
+                    </Typography>
+                  </Box>
+                }
               >
-                <AddIcon />
-              </IconButton>
-            </Tooltip>
-
-            {/* Кнопка поиска */}
-            <Tooltip
-              placement="right"
-              title={
-                <Box>
-                  <Typography variant="body2" component="span" display="block">
-                    Поиск в чатах
-                  </Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
-                    {hotkeyLabel.searchChats()}
-                  </Typography>
+                {/* span + width 100%: Tooltip не сжимает кнопку; center + px:0 — иконка по центру полосы как у меню */}
+                <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                  <ListItemButton onClick={handleCreateChat} sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}>
+                    <SidebarRailAddIcon sx={SIDEBAR_LIST_ICON_SX} />
+                  </ListItemButton>
                 </Box>
-              }
-            >
-              <IconButton
-                onClick={() => {
-                  if (!open) {
-                    onToggle(); // Раскрываем сайдбар для показа поиска
-                    // Устанавливаем фокус на поле поиска после небольшой задержки
-                    setTimeout(() => {
-                      searchInputRef.current?.focus();
-                    }, 300);
-                  } else {
-                    // Если сайдбар уже открыт, просто фокусируемся на поиске
-                    searchInputRef.current?.focus();
-                  }
-                }}
-                sx={{
-                  color: 'white',
-                  opacity: 1,
-                  width: 40,
-                  height: 40,
-                  borderRadius: 1,
-                  '&:hover': {
-                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                    opacity: 1,
-                    '& .MuiSvgIcon-root': {
-                      color: 'primary.main',
-                    },
-                  },
-                }}
+              </Tooltip>
+            </ListItem>
+            <ListItem disablePadding sx={{ mb: 0.5, display: 'block' }}>
+              <Tooltip
+                placement="right"
+                title={
+                  <Box>
+                    <Typography variant="body2" component="span" display="block">
+                      Поиск в чатах
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.85, display: 'block', mt: 0.25 }}>
+                      {hotkeyLabel.searchChats()}
+                    </Typography>
+                  </Box>
+                }
               >
-                <SearchIcon />
-              </IconButton>
-            </Tooltip>
-
-          </Box>
+                <Box component="span" sx={{ display: 'flex', width: '100%', justifyContent: 'center' }}>
+                  <ListItemButton
+                    onClick={() => {
+                      onToggle();
+                      setTimeout(() => {
+                        searchInputRef.current?.focus();
+                      }, 300);
+                    }}
+                    sx={getSidebarRailCollapsedListItemButtonSx(isDarkMode)}
+                  >
+                    <SidebarRailSearchIcon sx={SIDEBAR_LIST_ICON_SX} />
+                  </ListItemButton>
+                </Box>
+              </Tooltip>
+            </ListItem>
+          </List>
 
           {/* Кнопка "Скрыть панель" — та же стилистика, что на правом сайдбаре (fixed по центру высоты) */}
           {onHide && (
@@ -1044,9 +1082,6 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                     '&:hover': {
                       backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
                       opacity: 1,
-                      '& .MuiSvgIcon-root': { 
-                        color: 'primary.main', 
-                      },
                     },
                   }}
                 >
@@ -1093,31 +1128,20 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
 
       {/* Раздел Проекты */}
       {!useFoldersMode && open && (
-        <Box sx={{ px: 1.5, mb: 1 }}>
+        <Box sx={{ px: 1, mb: 1 }}>
           <Box
             onClick={() => setProjectsExpanded(!projectsExpanded)}
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              px: SIDEBAR_CONTROL_PX,
-              py: 0,
-              minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+              ...SIDEBAR_SECTION_HEADER_ROW_SX,
               cursor: 'pointer',
-              borderRadius: SIDEBAR_CONTROL_RADIUS,
-              '&:hover': {
-                backgroundColor: 'rgba(255,255,255,0.05)',
-              },
-              transition: 'background-color 0.2s ease',
             }}
           >
-            <Typography variant="subtitle2" sx={{ opacity: 0.8, fontSize: '0.75rem' }}>
+            <Typography variant="subtitle2" sx={SIDEBAR_SECTION_HEADER_TITLE_SX}>
               Проекты
             </Typography>
             <ExpandMoreIcon
               sx={{
-                fontSize: '1rem',
-                opacity: 0.8,
+                ...SIDEBAR_SECTION_CHEVRON_SX,
                 transform: projectsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                 transition: 'transform 0.2s ease',
               }}
@@ -1125,53 +1149,85 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
           </Box>
           {projectsExpanded && (
             <List sx={{ py: 0 }}>
-              <ListItem disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  onClick={() => setShowNewProjectModal(true)}
-                  sx={{
-                    borderRadius: 2,
-                    backgroundColor: 'transparent',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255,255,255,0.08)',
-                    },
-                    transition: 'all 0.2s ease',
-                    py: 0,
-                    minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
-                    px: SIDEBAR_CONTROL_PX,
-                  }}
-                >
-                  <ListItemIcon sx={{ color: 'white', minWidth: `${SIDEBAR_PROJECT_AVATAR_SIZE + 4}px`, marginRight: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px` }}>
-                    <AddFolderIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Typography
-                        variant="body2"
+              <Box sx={{ mb: 0.5 }}>
+                <ListItem disablePadding>
+                  <Box
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setShowNewProjectModal(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setShowNewProjectModal(true);
+                      }
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      pl: SIDEBAR_ICON_LEADING_PL,
+                      pr: SIDEBAR_CONTROL_PX,
+                      py: 0,
+                      minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                      },
+                      transition: 'background-color 0.2s ease',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      <ListItemIcon
                         sx={{
-                          color: 'white',
-                          fontWeight: 400,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          fontSize: '0.8rem',
+                          ...SIDEBAR_LIST_LEADING_ICON_SX,
+                          '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
                         }}
                       >
-                        Новый проект
-                      </Typography>
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
+                        <AddFolderIcon />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'white',
+                              fontWeight: 400,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontSize: '0.8rem',
+                            }}
+                          >
+                            Новый проект
+                          </Typography>
+                        }
+                      />
+                    </Box>
+                  </Box>
+                </ListItem>
+              </Box>
               {projects.map((project) => {
                 const renderProjectIcon = () => {
                   const sizePx = SIDEBAR_PROJECT_AVATAR_SIZE;
                   const iconColor = project.iconColor || '#9ca3af';
-                  // Круг убран — глиф растягиваем примерно до «старого круга»
-                  const glyphPx = Math.max(14, Math.round(sizePx * 1.0));
+                  // Глиф растягиваем примерно до «старого круга»
+                  const glyphPx = Math.max(16, Math.round(sizePx * 1.12));
                   const glyphSx = getProjectIconGlyphSx(glyphPx, iconColor);
+                  // Бокс = ширина колонки ListItemIcon (sizePx + 4), чтобы зазор
+                  // «глиф → текст» совпадал с кнопками «Новый чат» / «Поиск».
+                  const boxPx = sizePx + 4;
                   const iconWrapSx = {
-                    width: `${sizePx}px`,
-                    height: `${sizePx}px`,
+                    width: `${boxPx}px`,
+                    height: `${boxPx}px`,
                     display: 'flex' as const,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1218,7 +1274,8 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           width: '100%',
-                          px: SIDEBAR_CONTROL_PX,
+                          pl: SIDEBAR_ICON_LEADING_PL,
+                          pr: SIDEBAR_CONTROL_PX,
                           py: 0,
                           minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
                           borderRadius: 2,
@@ -1244,10 +1301,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                             alignItems: 'center',
                             flex: 1,
                             cursor: 'pointer',
-                            gap: 0.5,
                           }}
                         >
-                          <ListItemIcon sx={{ color: 'white', minWidth: `${SIDEBAR_PROJECT_AVATAR_SIZE + 4}px`, marginRight: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px` }}>
+                          <ListItemIcon sx={SIDEBAR_LIST_LEADING_ICON_SX}>
                             {renderProjectIcon()}
                           </ListItemIcon>
                           <ListItemText
@@ -1269,8 +1325,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                           />
                           <ExpandMoreIcon
                             sx={{
-                              fontSize: '1rem',
-                              opacity: 0.8,
+                              ...SIDEBAR_SECTION_CHEVRON_SX,
                               transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                               transition: 'transform 0.2s ease',
                             }}
@@ -1283,9 +1338,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                             setProjectMenuAnchor(e.currentTarget);
                             setSelectedProjectId(project.id);
                           }}
-                          sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                          sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                         >
-                          <MoreVertIcon fontSize="small" />
+                          <MoreVertIcon />
                         </IconButton>
                       </Box>
                     </ListItem>
@@ -1366,9 +1421,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                                 <IconButton
                                   size="small"
                                   onClick={(e) => handleChatMenuClick(e, chat.id)}
-                                  sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                                  sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                                 >
-                                  <MoreVertIcon fontSize="small" />
+                                  <MoreVertIcon />
                                 </IconButton>
                               )}
                               </ListItemButton>
@@ -1419,21 +1474,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
             if (!pinnedFolder) return null;
             return (
               <Box key={pinnedFolder.id} sx={{ mb: 1 }}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    px: SIDEBAR_CONTROL_PX,
-                    py: 0,
-                    minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
-                    borderRadius: SIDEBAR_CONTROL_RADIUS,
-                    '&:hover': {
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                    },
-                    transition: 'background-color 0.2s ease',
-                  }}
-                >
+                <Box sx={SIDEBAR_SECTION_HEADER_ROW_SX}>
                   <Box
                     onClick={() => handleToggleFolder(pinnedFolder.id)}
                     sx={{
@@ -1443,13 +1484,12 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                       cursor: 'pointer',
                     }}
                   >
-                    <Typography variant="subtitle2" sx={{ opacity: 0.8, fontSize: '0.75rem' }}>
+                    <Typography variant="subtitle2" sx={SIDEBAR_SECTION_HEADER_TITLE_SX}>
                       {pinnedFolder.name}
                     </Typography>
                     <ExpandMoreIcon
                       sx={{
-                        fontSize: '1rem',
-                        opacity: 0.8,
+                        ...SIDEBAR_SECTION_CHEVRON_SX,
                         transform: pinnedFolder.expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                         transition: 'transform 0.2s ease',
                         ml: 1,
@@ -1459,9 +1499,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   <IconButton
                     size="small"
                     onClick={(e) => handleFolderMenuClick(e, pinnedFolder.id)}
-                    sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                    sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                   >
-                    <MoreVertIcon fontSize="small" />
+                    <MoreVertIcon />
                   </IconButton>
                 </Box>
                 {pinnedFolder.expanded && (
@@ -1563,9 +1603,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                               <IconButton
                                 size="small"
                                 onClick={(e) => handleChatMenuClick(e, chatId)}
-                                sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                                sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                               >
-                                <MoreVertIcon fontSize="small" />
+                                <MoreVertIcon />
                               </IconButton>
                             )}
                           </ListItemButton>
@@ -1584,27 +1624,16 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
           <Box
             onClick={() => setChatsExpanded(!chatsExpanded)}
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              px: SIDEBAR_CONTROL_PX,
-              py: 0,
-              minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+              ...SIDEBAR_SECTION_HEADER_ROW_SX,
               cursor: 'pointer',
-              borderRadius: SIDEBAR_CONTROL_RADIUS,
-              '&:hover': {
-                backgroundColor: 'rgba(255,255,255,0.05)',
-              },
-              transition: 'background-color 0.2s ease',
             }}
           >
-            <Typography variant="subtitle2" sx={{ opacity: 0.8, fontSize: '0.75rem' }}>
+            <Typography variant="subtitle2" sx={SIDEBAR_SECTION_HEADER_TITLE_SX}>
               Все чаты
             </Typography>
             <ExpandMoreIcon
               sx={{
-                fontSize: '1rem',
-                opacity: 0.8,
+                ...SIDEBAR_SECTION_CHEVRON_SX,
                 transform: chatsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                 transition: 'transform 0.2s ease',
               }}
@@ -1710,9 +1739,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                               <IconButton
                                 size="small"
                                 onClick={(e) => handleChatMenuClick(e, chat.id)}
-                                sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                                sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                               >
-                                <MoreVertIcon fontSize="small" />
+                                <MoreVertIcon />
                               </IconButton>
                             )}
                           </ListItemButton>
@@ -1728,21 +1757,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
           {/* Отображение остальных папок (кроме "Закреплено") */}
           {folders.filter(f => f.name !== 'Закреплено').map((folder) => (
             <Box key={folder.id} sx={{ mb: 1 }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  px: SIDEBAR_CONTROL_PX,
-                  py: 0,
-                  minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
-                  borderRadius: SIDEBAR_CONTROL_RADIUS,
-                  '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.05)',
-                  },
-                  transition: 'background-color 0.2s ease',
-                }}
-              >
+              <Box sx={SIDEBAR_SECTION_HEADER_ROW_SX}>
                 <Box
                   onClick={() => handleToggleFolder(folder.id)}
                   sx={{
@@ -1752,13 +1767,12 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                     cursor: 'pointer',
                   }}
                 >
-                  <Typography variant="subtitle2" sx={{ opacity: 0.8, fontSize: '0.75rem' }}>
+                  <Typography variant="subtitle2" sx={SIDEBAR_SECTION_HEADER_TITLE_SX}>
                     {folder.name}
                   </Typography>
                   <ExpandMoreIcon
                     sx={{
-                      fontSize: '1rem',
-                      opacity: 0.8,
+                      ...SIDEBAR_SECTION_CHEVRON_SX,
                       transform: folder.expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                       transition: 'transform 0.2s ease',
                       ml: 1,
@@ -1768,9 +1782,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 <IconButton
                   size="small"
                   onClick={(e) => handleFolderMenuClick(e, folder.id)}
-                  sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                  sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                 >
-                  <MoreVertIcon fontSize="small" />
+                  <MoreVertIcon />
                 </IconButton>
               </Box>
               {folder.expanded && (
@@ -1874,9 +1888,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                             <IconButton
                               size="small"
                               onClick={(e) => handleChatMenuClick(e, chatId)}
-                              sx={{ color: 'rgba(255,255,255,0.7)', p: 0.5 }}
+                              sx={{ color: '#ffffff', p: 0.5, '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
                             >
-                              <MoreVertIcon fontSize="small" />
+                              <MoreVertIcon />
                             </IconButton>
                           )}
                         </ListItemButton>
@@ -1914,7 +1928,13 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   px: 2,
                 }}
               >
-                <ListItemIcon sx={{ color: 'white', minWidth: 32 }}>
+                <ListItemIcon
+                  sx={{
+                    color: '#ffffff',
+                    minWidth: 32,
+                    '& .MuiSvgIcon-root': { fontSize: '1.375rem' },
+                  }}
+                >
                   <Icon />
                 </ListItemIcon>
                 <ListItemText 
@@ -2038,7 +2058,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleMenuAction('settings')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <SettingsIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <SettingsIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Настройки</Typography>
               </Box>
 
@@ -2050,7 +2070,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleMenuAction('archive')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <ArchiveIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <ArchiveIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Архив</Typography>
               </Box>
 
@@ -2065,9 +2085,9 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   ...(userMenuSubmenu === 'help' && { backgroundColor: menuItemHover }),
                 }}
               >
-                <InfoIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <InfoIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Справка</Typography>
-                <ChevronRightIcon sx={{ fontSize: 18, color: submenuChevronColor, flexShrink: 0 }} />
+                <ChevronRightIcon sx={{ fontSize: 22, color: submenuChevronColor, flexShrink: 0 }} />
               </Box>
 
               <Box
@@ -2078,7 +2098,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleMenuAction('logout')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <LogoutIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <LogoutIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Выйти из аккаунта</Typography>
               </Box>
             </Box>
@@ -2106,7 +2126,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   }}
                   sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                 >
-                  <HelpOutlineIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <HelpOutlineIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Помощь</Typography>
                 </Box>
                 <Box
@@ -2116,7 +2136,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   }}
                   sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                 >
-                  <KeyboardIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <KeyboardIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Сочетание клавиш</Typography>
                 </Box>
               </Box>
@@ -2299,7 +2319,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleChatMenuAction('pin')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <PushPinIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <PushPinIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>
                   {(() => {
                     const chat = selectedChatId ? getChatById(selectedChatId) : null;
@@ -2317,7 +2337,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleChatMenuAction('edit')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <EditIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <EditIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Переименовать</Typography>
               </Box>
 
@@ -2332,11 +2352,11 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   ...(chatMenuSubmenu !== null && { backgroundColor: menuItemHover }),
                 }}
               >
-                <FolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <FolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE, whiteSpace: 'nowrap' }}>
                   {useFoldersMode ? 'Перейти в папку' : 'Перейти в проект'}
                 </Typography>
-                <ChevronRightIcon sx={{ fontSize: 18, color: submenuChevronColor, flexShrink: 0 }} />
+                <ChevronRightIcon sx={{ fontSize: 22, color: submenuChevronColor, flexShrink: 0 }} />
               </Box>
 
               <Box
@@ -2347,7 +2367,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 onClick={() => handleChatMenuAction('archive')}
                 sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
               >
-                <ArchiveIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                <ArchiveIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Архив</Typography>
               </Box>
 
@@ -2360,7 +2380,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   onClick={() => handleChatMenuAction('removeFromProject')}
                   sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                 >
-                  <FolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <FolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Перенести из проекта</Typography>
                 </Box>
               )}
@@ -2382,7 +2402,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.1)' },
                 }}
               >
-                <DeleteIcon sx={{ fontSize: 18, color: '#d32f2f', flexShrink: 0 }} />
+                <DeleteIcon sx={{ fontSize: 22, color: '#d32f2f', flexShrink: 0 }} />
                 <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE, color: '#d32f2f' }}>Удалить</Typography>
               </Box>
             </Box>
@@ -2410,7 +2430,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   }}
                   sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                 >
-                  <AddFolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <AddFolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Создать папку</Typography>
                 </Box>
 
@@ -2431,7 +2451,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                     opacity: selectedChatId && !getChatFolder(selectedChatId) ? 0.55 : 1,
                   }}
                 >
-                  <ChatIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <ChatIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Все чаты</Typography>
                 </Box>
 
@@ -2451,7 +2471,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                       }}
                       sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                     >
-                      <FolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                      <FolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                       <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>{folder.name}</Typography>
                     </Box>
                   ))}
@@ -2484,7 +2504,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                   }}
                   sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
                 >
-                  <AddFolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                  <AddFolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                   <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Новый проект</Typography>
                 </Box>
 
@@ -2510,7 +2530,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                         opacity: isSelected ? 0.55 : 1,
                       }}
                     >
-                      <FolderIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+                      <FolderIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
                       <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>{project.name}</Typography>
                     </Box>
                   );
@@ -2675,14 +2695,14 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               onClick={() => handleFolderMenuAction('rename')}
               sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
             >
-              <EditIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+              <EditIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
               <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Переименовать</Typography>
             </Box>
             <Box
               onClick={() => handleFolderMenuAction('archive')}
               sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
             >
-              <ArchiveIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+              <ArchiveIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
               <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Архив</Typography>
             </Box>
             <Box
@@ -2696,7 +2716,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.1)' },
               }}
             >
-              <DeleteIcon sx={{ fontSize: 18, color: '#d32f2f', flexShrink: 0 }} />
+              <DeleteIcon sx={{ fontSize: 22, color: '#d32f2f', flexShrink: 0 }} />
               <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE, color: '#d32f2f' }}>Удалить</Typography>
             </Box>
           </Box>
@@ -2982,7 +3002,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
               onClick={() => handleProjectMenuAction('edit')}
               sx={{ ...dropdownItemSx, display: 'flex', alignItems: 'center', gap: 1, color: menuItemColor }}
             >
-              <EditIcon sx={{ fontSize: 18, color: submenuIconColor, flexShrink: 0 }} />
+              <EditIcon sx={{ fontSize: 22, color: submenuIconColor, flexShrink: 0 }} />
               <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE }}>Редактировать проект</Typography>
             </Box>
             <Box
@@ -2996,7 +3016,7 @@ export default function Sidebar({ open, onToggle, isDarkMode, onToggleTheme, onH
                 '&:hover': { backgroundColor: 'rgba(211, 47, 47, 0.1)' },
               }}
             >
-              <DeleteIcon sx={{ fontSize: 18, color: '#d32f2f', flexShrink: 0 }} />
+              <DeleteIcon sx={{ fontSize: 22, color: '#d32f2f', flexShrink: 0 }} />
               <Typography sx={{ flex: 1, fontSize: MENU_ACTION_TEXT_SIZE, color: '#d32f2f' }}>Удалить проект</Typography>
             </Box>
           </Box>

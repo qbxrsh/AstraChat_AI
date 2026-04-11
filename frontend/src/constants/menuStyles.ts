@@ -43,6 +43,86 @@ export const SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX = 4;
 /** Размер аватарки-иконки проекта в сайдбаре, px. Минимальная ширина колонки иконок в списке = SIDEBAR_PROJECT_AVATAR_SIZE + 4. */
 export const SIDEBAR_PROJECT_AVATAR_SIZE = 18;
 
+/** Минимальная высота строки действия в левом/правом rail (чат, поиск, кнопки панели). */
+export const SIDEBAR_CONTROL_HEIGHT_PX = 36;
+/** Скругление строк секций сайдбара (MUI borderRadius theme unit). */
+export const SIDEBAR_CONTROL_RADIUS = 2;
+/** Горизонтальный padding строки в rail (MUI spacing). */
+export const SIDEBAR_CONTROL_PX = 2;
+
+/**
+ * Левый внутренний отступ у строк с ведущей иконкой (проекты, «Новый чат», поиск):
+ * чуть меньше {@link SIDEBAR_CONTROL_PX}, чтобы глиф визуально совпадал с текстом строк ниже.
+ */
+export const SIDEBAR_ICON_LEADING_PL = 1.75;
+
+/** Колонка ведущей иконки в списке сайдбара (проекты, «Новый чат», поиск) — как у MUI ListItemIcon + отступ до текста. */
+export const SIDEBAR_LIST_LEADING_ICON_SX = {
+  color: '#ffffff',
+  minWidth: `${SIDEBAR_PROJECT_AVATAR_SIZE + 4}px`,
+  marginRight: `${SIDEBAR_LIST_ICON_TO_TEXT_GAP_PX}px`,
+  justifyContent: 'flex-start',
+} as const;
+
+/** Стиль ListItemButton как у строк чата — для левой и правой боковых панелей. */
+export const SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX = {
+  borderRadius: 2,
+  backgroundColor: 'transparent',
+  '&:hover': {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  transition: 'all 0.2s ease',
+  py: 0,
+  minHeight: SIDEBAR_CONTROL_HEIGHT_PX,
+  px: SIDEBAR_CONTROL_PX,
+} as const;
+
+/** Иконки в строках rail: белые, крупнее глиф (без увеличения высоты кнопки). */
+export const SIDEBAR_LIST_ICON_SX = {
+  fontSize: '1.375rem',
+  color: '#ffffff',
+  flexShrink: 0,
+} as const;
+
+/**
+ * Размер глифа кнопки меню rail (левый/правый): как у «Новый чат» / «Поиск» визуально (меньше полного 1.375rem).
+ */
+export const SIDEBAR_RAIL_MENU_TOGGLE_GLYPH_SIZE = '1rem';
+
+/**
+ * Область нажатия иконки в узком rail — как у `IconButton` кнопки меню (40×40 px).
+ */
+export const SIDEBAR_RAIL_ICON_HIT_PX = 40;
+
+/**
+ * Только иконка в свернутой колонке rail: квадрат {@link SIDEBAR_RAIL_ICON_HIT_PX} со скруглением `borderRadius: 1`,
+ * фон hover как у кнопки меню rail (без смены цвета иконки на primary).
+ */
+export function getSidebarRailCollapsedListItemButtonSx(isDarkMode: boolean): SxProps<Theme> {
+  return {
+    ...SIDEBAR_CHAT_ROW_LIST_ITEM_BUTTON_SX,
+    flex: 'none',
+    width: SIDEBAR_RAIL_ICON_HIT_PX,
+    height: SIDEBAR_RAIL_ICON_HIT_PX,
+    minWidth: SIDEBAR_RAIL_ICON_HIT_PX,
+    minHeight: SIDEBAR_RAIL_ICON_HIT_PX,
+    maxWidth: SIDEBAR_RAIL_ICON_HIT_PX,
+    maxHeight: SIDEBAR_RAIL_ICON_HIT_PX,
+    mx: 'auto',
+    px: 0,
+    py: 0,
+    borderRadius: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    '&:hover': {
+      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+    },
+    '& .MuiTouchRipple-root': {
+      borderRadius: 1,
+    },
+  };
+}
+
 /** Обводка круга вокруг иконки/эмодзи проекта (толще 1.5px — лучше видно на тёмном фоне). */
 export function getProjectAvatarOutlineBorder(sizePx: number): string {
   return sizePx <= 22 ? '2.25px' : '2.75px';

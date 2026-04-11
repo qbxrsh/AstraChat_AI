@@ -271,9 +271,6 @@ function App() {
                                     '&:hover': {
                                       bgcolor: 'transparent',
                                       opacity: 1,
-                                      '& .MuiSvgIcon-root': {
-                                        color: 'primary.main',
-                                      },
                                     },
                                   }}
                                 >

@@ -50,12 +50,39 @@ const MessageRendererComponent: React.FC<MessageRendererProps> = ({ content, isS
 
   const sanitizeRawContent = useCallback((raw: string): string => {
     if (!raw) return raw;
-    // Нормализуем только экранированные формы тега em в обычные HTML-теги,
-    // чтобы <em>...</em> рендерился как курсив.
-    return raw
+    let s = raw
       .replace(/&lt;\s*em\s*&gt;/gi, '<em>')
       .replace(/&lt;\s*\/\s*em\s*&gt;/gi, '</em>')
-      .replace(/<\\\/\s*em\s*>/gi, '</em>');
+      .replace(/<\\\/\s*em\s*>/gi, '</em>')
+      .replace(/&lt;\s*i\s*&gt;/gi, '<i>')
+      .replace(/&lt;\s*\/\s*i\s*&gt;/gi, '</i>');
+
+    const collapseInsideTag = (inner: string) => inner.replace(/\s+/g, ' ').trim();
+    const preserved: string[] = [];
+    const mark = (html: string) => {
+      const token = `__ASTRACHAT_EM_BLOCK_${preserved.length}__`;
+      preserved.push(html);
+      return token;
+    };
+
+    // Сначала выносим корректные пары в плейсхолдеры (в т.ч. многострочные),
+    // иначе сиротский </em> на следующей строке ломает построчный parseInlineMarkdown.
+    s = s.replace(/<i>\s*([\s\S]*?)\s*<\/i>/gi, (_, inner) =>
+      mark(`<em>${collapseInsideTag(inner)}</em>`)
+    );
+    s = s.replace(/<em>\s*([\s\S]*?)\s*<\/em>/gi, (_, inner) =>
+      mark(`<em>${collapseInsideTag(inner)}</em>`)
+    );
+
+    // Оставшиеся одиночные теги — убираем (пара уже потеряна)
+    s = s.replace(/<\/?em>/gi, '');
+    s = s.replace(/<\/?i>/gi, '');
+
+    preserved.forEach((fragment, i) => {
+      s = s.split(`__ASTRACHAT_EM_BLOCK_${i}__`).join(fragment);
+    });
+
+    return s;
   }, []);
 
   const getSelectionPlainText = useCallback((): string => {
